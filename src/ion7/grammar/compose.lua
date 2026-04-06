@@ -1,5 +1,5 @@
 --- @module ion7.grammar.compose
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Grammar composition operators.
 ---
 --- All operators return Grammar_obj (or Builder for internal use).

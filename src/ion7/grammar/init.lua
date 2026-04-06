@@ -1,5 +1,5 @@
 --- @module ion7.grammar
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- ion7-grammar - Best-in-class GBNF grammar engine for LuaJIT.
 ---
 --- Pure Lua. Zero C. Works with any GGUF model via ion7-core.

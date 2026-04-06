@@ -1,5 +1,5 @@
 --- @module ion7.grammar.backtrack
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Grammar-guided generation with backtracking via ion7-core KV cache.
 ---
 --- This is our killer feature. Inspired by IterGen (ICLR 2025), implemented

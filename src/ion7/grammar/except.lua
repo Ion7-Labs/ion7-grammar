@@ -1,5 +1,5 @@
 --- @module ion7.grammar.except
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Grammar complement and exclusion operators.
 ---
 --- GBNF cannot express true set complement (there's no "match everything

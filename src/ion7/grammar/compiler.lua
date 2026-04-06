@@ -1,5 +1,5 @@
 --- @module ion7.grammar.compiler
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- AST → GBNF string compiler.
 ---
 --- Takes a set of named rules and produces a valid GBNF string for

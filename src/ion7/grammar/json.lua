@@ -1,5 +1,5 @@
 --- @module ion7.grammar.json
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- JSON Schema → GBNF converter.
 ---
 --- Converts a JSON Schema (Lua table) to a set of GBNF rules.

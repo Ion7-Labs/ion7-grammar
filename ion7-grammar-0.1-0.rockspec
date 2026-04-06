@@ -10,7 +10,7 @@ description = {
         KV-cache backtracking (IterGen/CRANE). Zero C dependencies.
     ]],
     homepage = "https://github.com/Ion7-Labs/ion7-grammar",
-    license  = "AGPL-3.0-or-later",
+    license  = "MIT-or-later",
 }
 dependencies = { "lua >= 5.1" }
 build = {

@@ -1,5 +1,5 @@
 --- @module ion7.grammar.context
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Stateful grammar that evolves with the conversation.
 ---
 --- Standard grammars are static per request. GrammarContext is a live

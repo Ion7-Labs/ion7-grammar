@@ -1,5 +1,5 @@
 --- @module ion7.grammar.regex
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Regex → GBNF converter.
 ---
 --- Parses a subset of PCRE/ERE regex and produces GBNF rules.

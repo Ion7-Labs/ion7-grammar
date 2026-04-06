@@ -1,5 +1,5 @@
 --- @module ion7.grammar.dccd
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Draft-Conditioned Constrained Decoding (DCCD) for ion7-grammar.
 ---
 --- Implementation of the DCCD algorithm (arXiv:2603.03305, Feb 2026)

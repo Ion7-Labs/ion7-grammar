@@ -1,5 +1,5 @@
 --- @module ion7.grammar.fuzz
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Grammar fuzzing - generate random valid strings without a model.
 ---
 --- Given a Grammar, produces random strings that are guaranteed to match

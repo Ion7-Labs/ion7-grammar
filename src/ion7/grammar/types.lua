@@ -1,5 +1,5 @@
 --- @module ion7.grammar.types
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Lua type annotations → GBNF grammars.
 ---
 --- Converts simple Lua type descriptions into grammars without having

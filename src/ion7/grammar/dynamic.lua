@@ -1,5 +1,5 @@
 --- @module ion7.grammar.dynamic
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Input-dependent grammars - build grammars from runtime data.
 ---
 --- The core problem with static grammars: if you write a grammar for SQL,

@@ -1,5 +1,5 @@
 --- @module ion7.grammar.ast
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Internal AST nodes for GBNF grammar construction.
 ---
 --- Every grammar is built as an AST then compiled to a GBNF string.

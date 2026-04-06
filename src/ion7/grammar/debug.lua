@@ -1,5 +1,5 @@
 --- @module ion7.grammar.debug
---- SPDX-License-Identifier: AGPL-3.0-or-later
+--- SPDX-License-Identifier: MIT
 --- Grammar debugging and introspection tools.
 ---
 --- Provides human-readable representations of grammars, rule analysis,
