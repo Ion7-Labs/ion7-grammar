@@ -45,6 +45,9 @@ Without ion7-grammar, you write fragile string templates. With it, you write Lua
 - ERE regex → GBNF (`from_regex`)
 - String/enum whitelists, longest-first order (`from_enum`, `from_json_enum`)
 - Tool-call grammar from a registry (`from_tools`)
+- JSON Schema via C++ libcommon backend (`from_json_schema_native`) — handles `$ref`, `allOf`, `anyOf`
+- Tool-call grammar + bound JSON parser in one call (`tool_pipeline`)
+- Auto-derive CRANE trigger words from grammar AST (`trigger_words`)
 - Manual rule builder with AST primitives (`builder`)
 - Raw GBNF passthrough (`raw`)
 
@@ -60,7 +63,7 @@ Without ion7-grammar, you write fragile string templates. With it, you write Lua
 
 **Advanced generation**
 - `Backtrack`: KV cache rollback to resample any grammar fragment (IterGen ICLR 2025 / CRANE ICML 2025 pattern)
-- `DCCD`: Draft-Conditioned Constrained Decoding - generate unconstrained draft, inject into KV, run constrained pass on augmented context (arXiv:2603.03305, Feb 2026)
+- `DCCD`: Draft-Conditioned Constrained Decoding — unconstrained draft injected into KV, constrained pass on augmented context (arXiv:2603.03305). `close_thinking` support for Qwen3.5/DeepSeek-R1. Validated end-to-end with `test_dccd_model.lua`.
 
 **Tooling**
 - Grammar fuzzer: random valid strings without a model (`Grammar.fuzz`)
@@ -138,16 +141,20 @@ end)
 
 ### DCCD (Draft-Conditioned Constrained Decoding)
 
+**Thinking models (Qwen3.5, DeepSeek-R1):** the generation prefix opens a `<think>` block that the draft pass never closes. Without `close_thinking = true`, the constrained pass runs while the model believes it is still reasoning and produces wrong output. Setting this option injects `\n</think>\n` between draft injection and the constrained pass.
+
 ```lua
 local dc = Grammar.dccd(ctx, vocab, {
-    draft_sampler     = free_sampler,   -- unconstrained
+    draft_sampler     = free_sampler,    -- unconstrained
     constrain_sampler = grammar_sampler, -- GBNF-constrained
-    max_draft_tokens  = 512,            -- use 256+ for thinking models
+    max_draft_tokens  = 128,
+    close_thinking    = true,  -- required for Qwen3.5 / DeepSeek-R1 and any thinking model
 })
 
 local result = dc:generate()
-print(result.text)   -- guaranteed grammar-valid
-print(result.draft)  -- unconstrained draft (for debugging)
+print(result.text)         -- guaranteed grammar-valid
+print(result.draft)        -- unconstrained draft (for debugging)
+print(result.n_close_toks) -- tokens injected to close <think> block (0 if not a thinking model)
 ```
 
 ---
@@ -182,7 +189,7 @@ The public API contract is documented in [`spec/PUBLIC_API.md`](spec/PUBLIC_API.
 | Component | Requirement |
 |-----------|-------------|
 | LuaJIT | 2.1+ |
-| ion7-core | 1.0+ (required for Backtrack, DCCD) |
+| ion7-core | 1.1+ (required for Backtrack, DCCD, from_json_schema_native) |
 | llama.cpp | b8600+ (via ion7-core) |
 | OS | Linux, macOS |
 

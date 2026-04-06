@@ -51,6 +51,38 @@ local g = Grammar.from_json_schema({
 
 ---
 
+### Grammar.from_json_schema_native(schema, root?)
+
+Build a grammar from a JSON Schema using the C++ libcommon backend (ion7-core required).
+Prefer this over `from_json_schema()` for schemas that use `$ref`, `allOf`, `anyOf`,
+`oneOf`, `additionalProperties`, or strict format validators.
+
+Falls back to `from_json_schema()` automatically if ion7-core is not loaded.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `schema` | `string\|table` | JSON Schema as a JSON string or Lua table |
+| `root` | `string?` | Root rule name override (default: `"root"`) |
+
+Returns: `Grammar_obj`
+
+**Note on Lua table input**: when a `table` is passed, `ion7.vendor.json` is required
+to encode it. Pass a JSON string to avoid this dependency.
+
+```lua
+-- Handles $ref, allOf, anyOf, oneOf correctly
+local g = Grammar.from_json_schema_native({
+    type = "object",
+    properties = {
+        id   = { type = "integer" },
+        name = { ["$ref"] = "#/$defs/Name" },
+    },
+    ["$defs"] = { Name = { type = "string" } },
+})
+```
+
+---
+
 ### Grammar.from_type(annotation, root?)
 
 Shortest path to a grammar: Lua type annotations -> GBNF. No JSON Schema knowledge required.
@@ -179,6 +211,44 @@ local g = Grammar.from_tools({
 
 ---
 
+### Grammar.tool_pipeline(tools)
+
+Build a tool-call grammar AND return a bound JSON parser for the output.
+Combines `from_tools()` (grammar) with a JSON extractor (parser) so the
+full generate → parse round-trip is a single call.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tools` | `table` | Non-empty array of `{ name, schema? }` tables (same as `from_tools`) |
+
+Returns: `Grammar_obj`, `function` — `(grammar, parse_fn)`
+
+The returned `parse_fn` has signature `parse_fn(raw_output) -> calls, err`:
+- `calls` — array of `{ name, arguments, id? }` tables, or `nil` on error
+- `err` — error string, or `nil` on success
+
+Normalises automatically: a single `{"name":...}` object is wrapped in an array.
+
+Requires `ion7.vendor.json` at call time. Without it, `parse_fn` returns `nil, error_msg`
+instead of erroring — the grammar is always returned regardless.
+
+```lua
+local g, parse = Grammar.tool_pipeline({
+    { name = "get-weather",
+      schema = { type = "object",
+          properties = { city = { type = "string" } },
+          required   = { "city" } } },
+})
+
+-- Pass g:to_gbnf() to the constrained sampler, then after generation:
+local calls, err = parse(generated_text)
+for _, c in ipairs(calls or {}) do
+    dispatch(c.name, c.arguments)
+end
+```
+
+---
+
 ### Grammar.raw(gbnf)
 
 Passthrough for hand-written GBNF strings. No builder. No composition.
@@ -278,6 +348,34 @@ Note: errors on `Grammar.raw()` grammars.
 List all defined rule names in definition order.
 
 Returns: `table` - array of rule name strings
+
+---
+
+### g:trigger_words(opts?)
+
+Derive the set of string prefixes that can start a valid match of this grammar.
+Returns a sorted array suitable as the `trigger_words` argument to
+`ion7_csampler_init` with `grammar_lazy = 1` (CRANE-style lazy activation).
+
+Only literal-initiated branches are collected. Character-class branches (`[0-9]`, etc.)
+are intentionally skipped — they would produce too many trigger strings to be useful.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `opts` | `table?` | `{ max_prefix = 8 }` — truncate each trigger to at most this many chars |
+
+Returns: `table` — sorted array of trigger strings (may be empty)
+
+```lua
+local g  = Grammar.from_json_schema({ type = "object", ... })
+local tw = g:trigger_words()
+-- tw = { "{" }
+
+-- Pass to csampler for CRANE lazy grammar activation:
+-- ion7_csampler_init(model, params, gbnf, tw, #tw, ...)
+```
+
+Note: returns `{}` on `Grammar.raw()` grammars (no builder to walk).
 
 ---
 
@@ -943,13 +1041,15 @@ Options:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `draft_sampler` | - | **(required)** Unconstrained sampler for step 1 |
+| `draft_sampler` | - | Unconstrained sampler for step 1. Required unless `spec_draft_fn` is provided. |
 | `constrain_sampler` | - | **(required)** Grammar-constrained sampler for step 2 |
 | `max_draft_tokens` | `512` | Max tokens in draft pass |
 | `max_final_tokens` | `512` | Max tokens in constrained pass |
 | `on_draft_token` | `nil` | `function(piece)` called with each draft token piece |
 | `on_final_token` | `nil` | `function(piece)` called with each constrained token piece |
 | `best_of_k` | `1` | Generate K drafts, use best |
+| `close_thinking` | `nil` | `true` or custom string. Injects `"\n</think>\n"` (or the custom string) between draft injection and the constrained pass. **Required for thinking models** (Qwen3.5, DeepSeek-R1): without it the constrained pass runs while the model believes it is still reasoning and produces wrong output. |
+| `spec_draft_fn` | `nil` | `function(last_tok) -> tokens_array`. O(1) n-gram draft via `ion7_speculative_draft`. When provided, `draft_sampler` is not required and `best_of_k` is forced to 1. Falls back to a single full pass if the function returns an empty table. |
 
 Returns: `DCCD` instance
 
@@ -966,7 +1066,7 @@ decoded into `ctx` before calling (i.e. `ctx:decode(prompt_tokens)` called first
 |-----------|------|-------------|
 | `opts` | `table?` | Override `max_draft_tokens`, `max_final_tokens`, `best_of_k` per call |
 
-Returns: `table` - `{ text, draft, tokens, draft_tokens, stop_reason, n_tokens, n_draft_toks }`
+Returns: `table` - `{ text, draft, tokens, draft_tokens, stop_reason, n_tokens, n_draft_toks, n_close_toks }`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -977,6 +1077,9 @@ Returns: `table` - `{ text, draft, tokens, draft_tokens, stop_reason, n_tokens, 
 | `stop_reason` | `string` | `"stop"` (EOG) or `"length"` |
 | `n_tokens` | `number` | Final token count |
 | `n_draft_toks` | `number` | Draft token count |
+| `n_close_toks` | `number` | Tokens injected to close the thinking block (0 when `close_thinking` not set) |
+
+**KV invariant**: `ctx:n_past() == n_prompt + n_draft_toks + n_close_toks + n_tokens` after return.
 
 ---
 
@@ -993,11 +1096,11 @@ Convenience: run DCCD with best-of-K draft selection. Equivalent to calling
 Returns: same as `dc:generate()`
 
 **Note on best_of_k score approximation**: with `k > 1`, the best draft is
-selected by the length of the constrained output - a proxy for the paper's
+selected by the length of the constrained output — a proxy for the paper's
 cumulative log feasible mass `S(k) = sum_t log(alpha_t)`. Exact `S(k)` requires
-per-step logit access before grammar masking, which is not yet exposed by the
-ion7-core sampler API (planned for v1.1). With `k=1` (the default), the
-implementation is fully faithful to the paper.
+per-step logit access before grammar masking (`ion7_csampler_get_candidates` not
+exposed in the bridge). With `k=1` (the default), the implementation is fully
+faithful to the paper.
 
 ---
 

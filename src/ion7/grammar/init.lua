@@ -22,6 +22,43 @@ local DCCD_m     = require "ion7.grammar.dccd"
 local Debug_m    = require "ion7.grammar.debug"
 local Except_m   = require "ion7.grammar.except"
 
+-- ── First-set computation (used by trigger_words) ────────────────────────────
+-- Walks a grammar AST and collects all string prefixes that can start a match.
+-- Used to auto-derive trigger_words for ion7_csampler grammar_lazy (CRANE).
+
+local function _first_literals(node, rules_map, visited, acc, max_len)
+    if not node then return end
+    local k = node.kind
+    if k == "literal" then
+        local s = node.value:sub(1, max_len)
+        if #s > 0 then acc[s] = true end
+    elseif k == "seq" then
+        -- Only the first item can start the match
+        if node.items and node.items[1] then
+            _first_literals(node.items[1], rules_map, visited, acc, max_len)
+        end
+    elseif k == "alt" then
+        -- Every alternative can start the match
+        for _, child in ipairs(node.items or {}) do
+            _first_literals(child, rules_map, visited, acc, max_len)
+        end
+    elseif k == "rep" then
+        -- Only include if at least one repetition is required
+        if (node.min or 0) >= 1 then
+            _first_literals(node.node, rules_map, visited, acc, max_len)
+        end
+    elseif k == "ref" then
+        local name = node.name
+        if not visited[name] and rules_map[name] then
+            visited[name] = true
+            _first_literals(rules_map[name], rules_map, visited, acc, max_len)
+        end
+    elseif k == "group" then
+        _first_literals(node.node, rules_map, visited, acc, max_len)
+    end
+    -- char nodes: too broad (e.g. [0-9] → 10 triggers), skip intentionally
+end
+
 -- ── Grammar_obj ───────────────────────────────────────────────────────────────
 -- Every public constructor returns a Grammar_obj.
 -- Grammar_obj is the single composable type in ion7-grammar.
@@ -82,6 +119,35 @@ end
 --- @return Grammar_obj
 function Grammar_obj:then_(other, sep)
     return Grammar.sequence(self, other, sep and { separator = sep } or nil)
+end
+
+--- Derive the set of string prefixes that can start a valid match of this
+--- grammar.  These are suitable as `trigger_words` for `ion7_csampler_init`
+--- with `grammar_lazy = 1` (CRANE-style activation).
+---
+--- Only literal-initiated branches are collected.  Character-class branches
+--- (e.g. [0-9]) are skipped because they would produce too many triggers.
+---
+--- @param  opts  table?
+---   opts.max_prefix  number?  Truncate each trigger to this many chars (default: 8).
+--- @return table  Sorted array of trigger strings.
+function Grammar_obj:trigger_words(opts)
+    opts = opts or {}
+    local b = self._builder
+    if not b then return {} end
+    local max_len = opts.max_prefix or 8
+    -- Build name → AST-body lookup from the builder's rule list
+    local rules_map = {}
+    for _, r in ipairs(b:rules()) do rules_map[r.name] = r.body end
+    local root_name = b._root
+    local root_body = rules_map[root_name]
+    if not root_body then return {} end
+    local acc = {}
+    _first_literals(root_body, rules_map, { [root_name] = true }, acc, max_len)
+    local out = {}
+    for s in pairs(acc) do out[#out + 1] = s end
+    table.sort(out)
+    return out
 end
 
 --- Fuzz: generate random valid strings from this grammar.
@@ -214,6 +280,101 @@ end
 --- @return Grammar_obj
 function Grammar.from_tools(tools)
     return Grammar_obj._new(Dynamic.from_tools(tools))
+end
+
+--- Build from JSON Schema using the C++ libcommon backend (ion7-core required).
+---
+--- Prefer this over `from_json_schema()` for production schemas that use
+--- `$ref`, `allOf`, `anyOf`, `oneOf`, `additionalProperties`, or strict
+--- format validators — features the pure-Lua backend handles partially.
+---
+--- Falls back to `from_json_schema()` if ion7-core is not initialised.
+---
+--- @param  schema  string|table  JSON Schema as a JSON string or Lua table.
+--- @param  root    string?       Root rule name override (default: "root").
+--- @return Grammar_obj
+function Grammar.from_json_schema_native(schema, root)
+    -- Accept Lua table (auto-encode) or raw JSON string
+    local schema_str
+    if type(schema) == "table" then
+        local json = require "ion7.vendor.json"
+        schema_str = json.encode(schema)
+    elseif type(schema) == "string" then
+        schema_str = schema
+    else
+        error("[ion7.grammar] from_json_schema_native: schema must be a string or table")
+    end
+
+    local ok_loader, loader = pcall(require, "ion7.core.ffi.loader")
+    if not ok_loader then
+        -- ion7-core not available: graceful fallback to Lua backend
+        local ok_j, json_m2 = pcall(require, "ion7.vendor.json")
+        local tbl = ok_j and json_m2.decode(schema_str) or schema
+        return Grammar.from_json_schema(type(tbl) == "table" and tbl or schema, root)
+    end
+
+    local ffi = require "ffi"
+    local B   = loader.instance().bridge
+
+    -- Two-call pattern: query size, then fill buffer
+    local needed = B.ion7_json_schema_to_grammar(schema_str, #schema_str, nil, 0)
+    if tonumber(needed) < 0 then
+        error("[ion7.grammar] from_json_schema_native: invalid JSON schema")
+    end
+    local buf = ffi.new("char[?]", needed + 1)
+    B.ion7_json_schema_to_grammar(schema_str, #schema_str, buf, needed + 1)
+    -- needed includes the NUL terminator; ffi.string stops at NUL anyway
+    local gbnf = ffi.string(buf)
+    return Grammar.raw(gbnf)
+end
+
+--- Build a tool-call grammar AND return a bound parser for the output.
+---
+--- Combines `from_tools()` (grammar) with a JSON extractor (parser) so the
+--- full generate → parse round-trip is one call.
+---
+--- The grammar constrains generation to syntactically valid tool-call JSON.
+--- The parser decodes the raw output and normalises it to an array of
+--- `{ name, arguments, id? }` tables, ready for dispatch.
+---
+--- @param  tools  table  Array of `{ name, schema }` tool definitions.
+--- @return Grammar_obj  Grammar to pass to the sampler.
+--- @return function     parser(raw_output) → calls, err
+---                        `calls` is a table array or nil on error.
+---                        `err` is a string or nil.
+---
+--- @usage
+---   local g, parse = Grammar.tool_pipeline(tools)
+---   -- ... generate with g:to_gbnf() as grammar constraint ...
+---   local calls, err = parse(generated_text)
+---   for _, c in ipairs(calls or {}) do
+---       dispatch(c.name, c.arguments)
+---   end
+function Grammar.tool_pipeline(tools)
+    local g = Grammar.from_tools(tools)
+
+    -- Load JSON once; ion7.vendor.json is available without ion7-core
+    local json_ok, json_mod = pcall(require, "ion7.vendor.json")
+
+    local function parse(raw_output)
+        if not json_ok then
+            return nil, "[ion7.grammar] tool_pipeline parser requires ion7.vendor.json"
+        end
+        local ok, result = pcall(json_mod.decode, raw_output)
+        if not ok then
+            return nil, "json parse error: " .. tostring(result)
+        end
+        -- Normalise: single {name="...", arguments=...} → wrap in array
+        if type(result) == "table" and type(result.name) == "string" then
+            return { result }
+        end
+        if type(result) == "table" then
+            return result
+        end
+        return nil, "unexpected tool call format: " .. type(result)
+    end
+
+    return g, parse
 end
 
 --- Passthrough for hand-written GBNF strings.

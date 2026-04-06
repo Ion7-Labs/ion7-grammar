@@ -31,9 +31,13 @@
 --- Limitations vs the paper:
 ---   - best_of_k selection uses constrained output length as a proxy for the
 ---     paper's cumulative log feasible mass S(k) = Σ log(α̃_t). Exact S(k)
----     requires per-step logit access before grammar masking, which is not yet
----     exposed by the ion7-core sampler API (planned for v1.1).
+---     requires the per-step probability mass of valid tokens before grammar
+---     masking. ion7_csampler with grammar_first=0 defers grammar to last and
+---     gives access to the pre-grammar distribution, but
+---     ion7_csampler_get_candidates() is not exposed in the bridge.
 ---   - With k=1 (the default), our implementation is fully faithful to the paper.
+---   - When spec_draft_fn is provided, best_of_k is forced to 1 (n-gram drafts
+---     are deterministic; running K identical drafts is pointless).
 ---
 --- @usage
 ---   local dc = DCCD.new(ctx, vocab, {
@@ -53,15 +57,17 @@
 --- @version 0.1.0
 
 --- @class DCCD
---- @field private _ctx      any      ion7-core Context.
---- @field private _vocab    any      ion7-core Vocab.
---- @field private _draft_s  any      Unconstrained draft sampler.
---- @field private _final_s  any      Grammar-constrained sampler.
---- @field private _max_d    number   Max tokens for the draft pass.
---- @field private _max_f    number   Max tokens for the final constrained pass.
---- @field private _on_draft function? Callback invoked with each draft piece.
---- @field private _on_final function? Callback invoked with each final piece.
---- @field private _best_k   number   Number of drafts to generate and rank.
+--- @field private _ctx         any       ion7-core Context.
+--- @field private _vocab       any       ion7-core Vocab.
+--- @field private _draft_s     any       Unconstrained draft sampler (nil when _spec_fn set).
+--- @field private _final_s     any       Grammar-constrained sampler.
+--- @field private _max_d       number    Max tokens for the draft pass.
+--- @field private _max_f       number    Max tokens for the final constrained pass.
+--- @field private _on_draft    function? Callback invoked with each draft piece.
+--- @field private _on_final    function? Callback invoked with each final piece.
+--- @field private _best_k      number    Number of drafts to generate and rank.
+--- @field private _spec_fn     function? Fast-draft via ion7_speculative_draft (optional).
+--- @field private _close_think string?   Closing sequence injected between draft and constrained pass (nil = disabled).
 local DCCD = {}
 DCCD.__index = DCCD
 
@@ -71,31 +77,71 @@ DCCD.__index = DCCD
 --- @param  vocab  any    ion7-core Vocab.
 --- @param  opts   table
 ---   opts.draft_sampler      any       Unconstrained sampler for step 1.
+---                                     Optional when spec_draft_fn is provided.
 ---   opts.constrain_sampler  any       Grammar-constrained sampler for step 2.
 ---   opts.max_draft_tokens   number?   Max tokens in draft (default: 512).
 ---   opts.max_final_tokens   number?   Max tokens in final (default: 512).
 ---   opts.on_draft_token     function? Called with each draft piece.
 ---   opts.on_final_token     function? Called with each final piece.
 ---   opts.best_of_k          number?   Generate K drafts, use best (default: 1).
+---   opts.close_thinking     boolean|string?
+---     When true, injects "\n</think>\n" between the draft and the constrained
+---     pass.  Pass a custom string to override the closing sequence.
+---     Use this with thinking models (Qwen3.5, DeepSeek-R1): the draft sampler
+---     generates inside a <think> block that is never closed; without this flag
+---     the constrained pass runs while the model believes it is still reasoning,
+---     which corrupts the answer.
+---   opts.spec_draft_fn      function? Fast draft via ion7_speculative_draft.
+---     Signature: spec_draft_fn(last_tok) → tokens_array
+---     When provided, replaces the full-decode draft pass with an O(1) n-gram
+---     lookup (ion7_speculative NGRAM_CACHE / NGRAM_SIMPLE).  draft_sampler is
+---     not used in this path.  best_of_k is forced to 1 (n-gram drafts are
+---     deterministic — running K identical drafts is pointless).
+---
+---     Example:
+---       local ffi = require "ffi"
+---       local out  = ffi.new("int32_t[64]")
+---       local function my_spec(last_tok)
+---           local n = B.ion7_speculative_draft(
+---               spec, prompt_toks, n_prompt, last_tok, out, 64)
+---           local toks = {}
+---           for i = 0, tonumber(n)-1 do toks[#toks+1] = tonumber(out[i]) end
+---           return toks
+---       end
+---       local dc = Grammar.dccd(ctx, vocab, {
+---           spec_draft_fn     = my_spec,
+---           constrain_sampler = ...,
+---       })
 --- @return DCCD
 function DCCD.new(ctx, vocab, opts)
     assert(ctx,   "[ion7.grammar.dccd] ctx required")
     assert(vocab, "[ion7.grammar.dccd] vocab required")
-    assert(opts and opts.draft_sampler,
-        "[ion7.grammar.dccd] opts.draft_sampler required")
+    assert(opts,  "[ion7.grammar.dccd] opts required")
     assert(opts.constrain_sampler,
         "[ion7.grammar.dccd] opts.constrain_sampler required")
+    -- draft_sampler is required only when spec_draft_fn is NOT provided
+    assert(opts.spec_draft_fn or opts.draft_sampler,
+        "[ion7.grammar.dccd] opts.draft_sampler required (or provide opts.spec_draft_fn)")
+
+    local close_think
+    if opts.close_thinking == true then
+        close_think = "\n</think>\n"
+    elseif type(opts.close_thinking) == "string" then
+        close_think = opts.close_thinking
+    end
 
     return setmetatable({
-        _ctx      = ctx,
-        _vocab    = vocab,
-        _draft_s  = opts.draft_sampler,
-        _final_s  = opts.constrain_sampler,
-        _max_d    = opts.max_draft_tokens  or 512,
-        _max_f    = opts.max_final_tokens  or 512,
-        _on_draft = opts.on_draft_token,
-        _on_final = opts.on_final_token,
-        _best_k   = opts.best_of_k or 1,
+        _ctx         = ctx,
+        _vocab       = vocab,
+        _draft_s     = opts.draft_sampler,
+        _final_s     = opts.constrain_sampler,
+        _max_d       = opts.max_draft_tokens  or 512,
+        _max_f       = opts.max_final_tokens  or 512,
+        _on_draft    = opts.on_draft_token,
+        _on_final    = opts.on_final_token,
+        _best_k      = opts.best_of_k or 1,
+        _spec_fn     = opts.spec_draft_fn,
+        _close_think = close_think,
     }, DCCD)
 end
 
@@ -169,17 +215,44 @@ function DCCD:generate(opts)
     local pre_snap = ctx:snapshot()
     local pre_n    = ctx._n_past
 
-    -- ── Step 1: Generate K unconstrained drafts ───────────────────────────────
-    -- For K=1, stream via on_draft_token. For K>1, suppress streaming because
-    -- we cannot know the winning draft until all constrained passes complete.
-    local stream_draft = (best_k == 1) and self._on_draft or nil
+    -- ── Step 1: Generate unconstrained draft(s) ──────────────────────────────
+    -- Two paths:
+    --   A) spec_draft_fn provided → O(1) n-gram lookup, single deterministic
+    --      draft (best_k forced to 1 — identical n-gram lookups are pointless).
+    --   B) draft_sampler → full decode pass, supports best_of_k.
     local drafts = {}
 
-    for _ = 1, best_k do
+    if self._spec_fn then
+        -- Fast path: speculative n-gram draft (no decode, no GPU, microseconds)
+        -- Grab the last token in the context to seed the n-gram lookup.
+        -- ctx._n_past > 0 is guaranteed (caller must have decoded the prompt).
+        local last_tok = ctx._last_tok or 0  -- set by Context.decode_single
         ctx:restore(pre_snap)
         ctx._n_past = pre_n
-        local text, toks = self:_run_pass(self._draft_s, max_d, stream_draft)
-        drafts[#drafts + 1] = { text = text, toks = toks }
+
+        local spec_toks = self._spec_fn(last_tok) or {}
+        if #spec_toks > 0 then
+            local pieces = {}
+            for _, tok in ipairs(spec_toks) do
+                pieces[#pieces + 1] = vocab:piece(tok)
+            end
+            drafts[1] = { text = table.concat(pieces), toks = spec_toks }
+        else
+            -- N-gram miss: fall back to a single full draft pass
+            local text, toks = self:_run_pass(self._draft_s or self._final_s,
+                                               max_d, self._on_draft)
+            drafts[1] = { text = text, toks = toks }
+        end
+    else
+        -- Standard path: K full decode passes
+        -- For K=1, stream via on_draft_token. For K>1, suppress (winner unknown).
+        local stream_draft = (best_k == 1) and self._on_draft or nil
+        for _ = 1, best_k do
+            ctx:restore(pre_snap)
+            ctx._n_past = pre_n
+            local text, toks = self:_run_pass(self._draft_s, max_d, stream_draft)
+            drafts[#drafts + 1] = { text = text, toks = toks }
+        end
     end
 
     -- ── Step 2: For each draft, inject into KV then run constrained pass ──────
@@ -191,7 +264,7 @@ function DCCD:generate(opts)
     -- Draft selection: the paper uses cumulative log feasible mass
     --   S(k) = Σ_t log(α̃_t),  α̃_t = Pr[next token ∈ valid set | context]
     -- Exact computation requires per-step logit access before grammar masking
-    -- (not yet exposed in the sampler API). We approximate with constrained
+    -- (ion7_csampler_get_candidates not exposed in bridge). We approximate with constrained
     -- output length: longer output → higher cumulative feasibility.
     local best_result = nil
     local best_len    = -1
@@ -205,6 +278,19 @@ function DCCD:generate(opts)
         -- The constrained sampler now attends to (prompt + draft) as history.
         for _, tok in ipairs(draft.toks) do
             ctx:decode_single(tok, 0)
+        end
+
+        -- Thinking-model fix: close the <think> block opened by the generation
+        -- prefix before the constrained pass.  Without this, models like Qwen3.5
+        -- treat the constrained tokens as part of the reasoning chain rather than
+        -- the final answer, producing semantically wrong output.
+        local n_close = 0
+        if self._close_think then
+            local close_toks, n = vocab:tokenize(self._close_think, false, true)
+            for i = 0, n - 1 do
+                ctx:decode_single(close_toks[i], 0)
+            end
+            n_close = n
         end
 
         -- Run constrained generation on augmented context (prompt + draft + z<t)
@@ -222,6 +308,7 @@ function DCCD:generate(opts)
                 stop_reason  = "stop",
                 n_tokens     = #final_toks,
                 n_draft_toks = #draft.toks,
+                n_close_toks = n_close,
             }
         end
     end

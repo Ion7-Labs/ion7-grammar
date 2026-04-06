@@ -1628,8 +1628,14 @@ local TOKEN_PIECES = {
 local EOG_ID = 999
 
 local mock_vocab = {
-    is_eog = function(_, tok) return tok == EOG_ID end,
-    piece  = function(_, tok) return TOKEN_PIECES[tok] or "?" end,
+    is_eog   = function(_, tok) return tok == EOG_ID end,
+    piece    = function(_, tok) return TOKEN_PIECES[tok] or "?" end,
+    -- tokenize: each byte becomes one token (id = byte value), 0-indexed array
+    tokenize = function(_, str, _, _)
+        local toks = {}
+        for i = 0, #str - 1 do toks[i] = str:byte(i + 1) end
+        return toks, #str
+    end,
 }
 
 local snap_id = 0
@@ -1908,6 +1914,400 @@ T.test("Grammar.dccd: default max_draft_tokens=512", function()
         constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
     })
     T.eq(dc._max_d, 512)
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Grammar_obj:trigger_words()
+-- ─────────────────────────────────────────────────────────────────────────────
+
+T.suite("Grammar_obj:trigger_words()")
+
+T.test("trigger_words: literal root returns that literal", function()
+    local g = Grammar.from_builder(
+        Grammar.builder():rule("root", Grammar.literal("SELECT"))
+    )
+    local tw = g:trigger_words()
+    T.eq(#tw, 1)
+    T.eq(tw[1], "SELECT")
+end)
+
+T.test("trigger_words: seq returns first child only", function()
+    local g = Grammar.from_builder(
+        Grammar.builder():rule("root",
+            Grammar.seq(Grammar.literal("{"), Grammar.literal("}")))
+    )
+    local tw = g:trigger_words()
+    T.eq(#tw, 1)
+    T.eq(tw[1], "{")
+end)
+
+T.test("trigger_words: alt returns all alternatives", function()
+    local g = Grammar.from_builder(
+        Grammar.builder():rule("root",
+            Grammar.alt(Grammar.literal("true"), Grammar.literal("false")))
+    )
+    local tw = g:trigger_words()
+    table.sort(tw)
+    T.eq(#tw, 2)
+    T.eq(tw[1], "false")
+    T.eq(tw[2], "true")
+end)
+
+T.test("trigger_words: rep with min=0 skipped (optional), min=1 included", function()
+    local g_opt = Grammar.from_builder(
+        Grammar.builder():rule("root",
+            Grammar.rep(Grammar.literal("x"), 0, 5))
+    )
+    T.eq(#g_opt:trigger_words(), 0, "min=0 means optional → no trigger")
+
+    local g_req = Grammar.from_builder(
+        Grammar.builder():rule("root",
+            Grammar.rep(Grammar.literal("y"), 1, 5))
+    )
+    local tw = g_req:trigger_words()
+    T.eq(#tw, 1)
+    T.eq(tw[1], "y")
+end)
+
+T.test("trigger_words: ref resolves to target rule", function()
+    local g = Grammar.from_builder(
+        Grammar.builder()
+            :rule("root", Grammar.ref("inner"))
+            :rule("inner", Grammar.literal("BEGIN"))
+    )
+    local tw = g:trigger_words()
+    T.eq(#tw, 1)
+    T.eq(tw[1], "BEGIN")
+end)
+
+T.test("trigger_words: max_prefix truncates long literals", function()
+    local g = Grammar.from_builder(
+        Grammar.builder():rule("root", Grammar.literal("SELECT_ALL"))
+    )
+    local tw = g:trigger_words({ max_prefix = 6 })
+    T.eq(#tw, 1)
+    T.eq(tw[1], "SELECT")
+end)
+
+T.test("trigger_words: char nodes are skipped (too broad)", function()
+    local g = Grammar.from_builder(
+        Grammar.builder():rule("root", Grammar.char("0-9"))
+    )
+    T.eq(#g:trigger_words(), 0)
+end)
+
+T.test("trigger_words: JSON schema grammar starts with {", function()
+    local g = Grammar.from_json_schema({
+        type = "object",
+        properties = { status = { type = "string" } },
+    })
+    local tw = g:trigger_words()
+    local found = false
+    for _, s in ipairs(tw) do
+        if s == "{" then found = true; break end
+    end
+    T.ok(found, "JSON object grammar should trigger on '{'")
+end)
+
+T.test("trigger_words: result is sorted", function()
+    local g = Grammar.from_builder(
+        Grammar.builder():rule("root",
+            Grammar.alt(Grammar.literal("z"), Grammar.literal("a"),
+                        Grammar.literal("m")))
+    )
+    local tw = g:trigger_words()
+    T.eq(tw[1], "a")
+    T.eq(tw[2], "m")
+    T.eq(tw[3], "z")
+end)
+
+T.test("trigger_words: raw grammar returns empty (no builder)", function()
+    local g = Grammar.raw('root ::= "x"')
+    T.eq(type(g:trigger_words()), "table")
+    T.eq(#g:trigger_words(), 0)
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Grammar.from_json_schema_native()
+-- ─────────────────────────────────────────────────────────────────────────────
+
+T.suite("Grammar.from_json_schema_native()")
+
+T.test("from_json_schema_native: function is exported", function()
+    T.eq(type(Grammar.from_json_schema_native), "function")
+end)
+
+T.test("from_json_schema_native: errors on non-string/non-table input", function()
+    T.err(function()
+        ---@diagnostic disable-next-line: param-type-mismatch
+        Grammar.from_json_schema_native(42)
+    end, "schema must be a string or table")
+end)
+
+T.test("from_json_schema_native: errors on boolean input", function()
+    T.err(function()
+        ---@diagnostic disable-next-line: param-type-mismatch
+        Grammar.from_json_schema_native(true)
+    end, "schema must be a string or table")
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Grammar.tool_pipeline()
+-- ─────────────────────────────────────────────────────────────────────────────
+
+T.suite("Grammar.tool_pipeline()")
+
+local sample_tools = {
+    { name = "get_weather", schema = { type = "object",
+        properties = { city = { type = "string" } } } },
+}
+
+T.test("tool_pipeline: returns two values (grammar, parse_fn)", function()
+    local g, parse = Grammar.tool_pipeline(sample_tools)
+    T.eq(type(g),     "table",    "first return is Grammar_obj")
+    T.eq(type(parse), "function", "second return is parse function")
+end)
+
+T.test("tool_pipeline: grammar has to_gbnf", function()
+    local g = Grammar.tool_pipeline(sample_tools)
+    T.eq(type(g.to_gbnf), "function")
+end)
+
+T.test("tool_pipeline: grammar GBNF contains tool name", function()
+    local g = Grammar.tool_pipeline(sample_tools)
+    T.ok(g:to_gbnf():find("get_weather"), "GBNF should reference the tool name")
+end)
+
+T.test("tool_pipeline: parse returns nil+error when ion7.vendor.json absent", function()
+    -- In the pure test env, ion7.vendor.json is not installed.
+    -- parse() must degrade gracefully: nil + descriptive error message.
+    local _, parse = Grammar.tool_pipeline(sample_tools)
+    local calls, err = parse('{"name":"get_weather","arguments":{"city":"Paris"}}')
+    -- Two valid outcomes: either parsed (if vendor json is available) or nil+err
+    if calls == nil then
+        T.ok(type(err) == "string", "error must be a string")
+    else
+        T.eq(type(calls), "table")
+    end
+end)
+
+T.test("tool_pipeline: errors on empty tools", function()
+    T.err(function() Grammar.tool_pipeline({}) end, "non%-empty")
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DCCD spec_draft_fn path
+-- ─────────────────────────────────────────────────────────────────────────────
+
+T.suite("DCCD spec_draft_fn path")
+
+T.test("DCCD.new: spec_draft_fn accepted without draft_sampler", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        spec_draft_fn     = function(_) return { 20, 21, 22 } end,
+        constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+    })
+    T.eq(type(dc), "table")
+    T.ok(type(dc.generate) == "function")
+end)
+
+T.test("DCCD.new: spec_draft_fn is called during generate", function()
+    mock_ctx._n_past = 10
+    local called = false
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        spec_draft_fn     = function(_) called = true; return { 20, 21 } end,
+        constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+        max_final_tokens  = 10,
+    })
+    dc:generate()
+    T.ok(called, "spec_draft_fn should be called during generate")
+end)
+
+T.test("DCCD.new: still requires constrain_sampler when spec_draft_fn provided", function()
+    T.err(function()
+        DCCD_m.new(mock_ctx, mock_vocab, {
+            spec_draft_fn = function(_) return {} end,
+        })
+    end, "constrain_sampler required")
+end)
+
+T.test("DCCD.new: still errors when neither draft_sampler nor spec_draft_fn given", function()
+    T.err(function()
+        DCCD_m.new(mock_ctx, mock_vocab, {
+            constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+        })
+    end, "draft_sampler required")
+end)
+
+T.test("generate: spec_draft_fn tokens injected before constrained pass", function()
+    mock_ctx._n_past = 10
+    local spec_toks_given = { 20, 21, 22 }
+    local kv_spec = {}
+    local mock_ctx_spec = {
+        _n_past  = 10,
+        _last_tok = 7,
+        ptr      = function(self) return self end,
+        decode_single = function(self, tok, _)
+            self._n_past = self._n_past + 1
+            kv_spec[#kv_spec + 1] = tok
+        end,
+        snapshot = function(self)
+            return { n_past = self._n_past }
+        end,
+        restore  = function(self, snap)
+            self._n_past = snap.n_past
+            kv_spec = {}
+        end,
+    }
+    local dc = DCCD_m.new(mock_ctx_spec, mock_vocab, {
+        spec_draft_fn     = function(_) return spec_toks_given end,
+        constrain_sampler = make_scripted_sampler({ 1, 2, 3 }, EOG_ID),
+        max_final_tokens  = 10,
+    })
+    local r = dc:generate()
+    assert(r, "generate must return a result table")
+    -- Draft text must be reconstructed from spec_toks_given
+    T.ok(type(r.draft) == "string")
+    local dt = r.draft_tokens
+    assert(dt, "draft_tokens must be present")
+    T.eq(#dt, 3, "draft_tokens should be the spec tokens")
+    T.eq(dt[1], 20)
+    T.eq(dt[2], 21)
+    T.eq(dt[3], 22)
+end)
+
+T.test("generate: spec_draft_fn empty → falls back to constrain_sampler draft", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        spec_draft_fn     = function(_) return {} end,
+        constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+        max_draft_tokens  = 10,
+        max_final_tokens  = 32,
+    })
+    -- Empty spec result → fallback uses _final_s as draft, then constrained pass
+    -- Both passes use the same scripted sampler → result should still be a valid table
+    local r = dc:generate()
+    assert(r, "generate must return a result table")
+    T.ok(type(r.text) == "string")
+end)
+
+T.test("generate: spec_draft_fn nil result treated as empty", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        spec_draft_fn     = function(_) return nil end,
+        constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+        max_draft_tokens  = 10,
+        max_final_tokens  = 32,
+    })
+    local r = dc:generate()
+    T.eq(type(r), "table")
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DCCD close_thinking
+-- ─────────────────────────────────────────────────────────────────────────────
+
+T.suite("DCCD close_thinking")
+
+T.test("close_thinking=true → n_close_toks = len('\\n</think>\\n')", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler({ 20 }, EOG_ID),
+        constrain_sampler = make_scripted_sampler({ 1 }, EOG_ID),
+        max_draft_tokens  = 5,
+        max_final_tokens  = 5,
+        close_thinking    = true,
+    })
+    local r = dc:generate()
+    assert(r)
+    T.eq(r.n_close_toks, #"\n</think>\n")
+end)
+
+T.test("close_thinking=string → n_close_toks = len of custom string", function()
+    mock_ctx._n_past = 10
+    local close_str = "</think>"
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler({ 20 }, EOG_ID),
+        constrain_sampler = make_scripted_sampler({ 1 }, EOG_ID),
+        max_draft_tokens  = 5,
+        max_final_tokens  = 5,
+        close_thinking    = close_str,
+    })
+    local r = dc:generate()
+    assert(r)
+    T.eq(r.n_close_toks, #close_str)
+end)
+
+T.test("close_thinking=false → n_close_toks = 0", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler({ 20 }, EOG_ID),
+        constrain_sampler = make_scripted_sampler({ 1 }, EOG_ID),
+        max_draft_tokens  = 5,
+        max_final_tokens  = 5,
+        close_thinking    = false,
+    })
+    local r = dc:generate()
+    assert(r)
+    T.eq(r.n_close_toks, 0)
+end)
+
+T.test("close_thinking absent → n_close_toks = 0", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler({ 20 }, EOG_ID),
+        constrain_sampler = make_scripted_sampler({ 1 }, EOG_ID),
+        max_draft_tokens  = 5,
+        max_final_tokens  = 5,
+    })
+    local r = dc:generate()
+    assert(r)
+    T.eq(r.n_close_toks, 0)
+end)
+
+T.test("n_close_toks=0 when close_thinking not set", function()
+    mock_ctx._n_past = 10
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler(draft_seq, EOG_ID),
+        constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+        max_draft_tokens  = 10,
+        max_final_tokens  = 32,
+    })
+    local r = dc:generate()
+    assert(r, "generate must return a result")
+    T.eq(r.n_close_toks, 0)
+end)
+
+T.test("n_close_toks matches byte length of close sequence", function()
+    mock_ctx._n_past = 10
+    local close_str = "</think>"   -- 8 bytes → 8 mock tokens
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler(draft_seq, EOG_ID),
+        constrain_sampler = make_scripted_sampler(final_seq, EOG_ID),
+        max_draft_tokens  = 10,
+        max_final_tokens  = 32,
+        close_thinking    = close_str,
+    })
+    local r = dc:generate()
+    assert(r, "generate must return a result")
+    T.eq(r.n_close_toks, #close_str)
+end)
+
+T.test("n_past advances by n_close_toks extra when close_thinking set", function()
+    mock_ctx._n_past = 10
+    local pre_past = mock_ctx._n_past
+    local close_str = "X"   -- 1 byte
+    local dc = DCCD_m.new(mock_ctx, mock_vocab, {
+        draft_sampler     = make_scripted_sampler({ 20 }, EOG_ID),
+        constrain_sampler = make_scripted_sampler({ 1 }, EOG_ID),
+        max_draft_tokens  = 5,
+        max_final_tokens  = 5,
+        close_thinking    = close_str,
+    })
+    local r = dc:generate()
+    assert(r, "generate must return a result")
+    -- n_past = pre + draft(1) + close(1) + final(1)
+    T.eq(mock_ctx._n_past, pre_past + r.n_draft_toks + r.n_close_toks + r.n_tokens)
 end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
