@@ -286,7 +286,7 @@ end
 ---
 --- Prefer this over `from_json_schema()` for production schemas that use
 --- `$ref`, `allOf`, `anyOf`, `oneOf`, `additionalProperties`, or strict
---- format validators — features the pure-Lua backend handles partially.
+--- format validators - features the pure-Lua backend handles partially.
 ---
 --- Falls back to `from_json_schema()` if ion7-core is not initialised.
 ---

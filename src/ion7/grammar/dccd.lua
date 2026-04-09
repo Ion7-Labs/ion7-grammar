@@ -96,7 +96,7 @@ DCCD.__index = DCCD
 ---     When provided, replaces the full-decode draft pass with an O(1) n-gram
 ---     lookup (ion7_speculative NGRAM_CACHE / NGRAM_SIMPLE).  draft_sampler is
 ---     not used in this path.  best_of_k is forced to 1 (n-gram drafts are
----     deterministic — running K identical drafts is pointless).
+---     deterministic - running K identical drafts is pointless).
 ---
 ---     Example:
 ---       local ffi = require "ffi"
@@ -218,7 +218,7 @@ function DCCD:generate(opts)
     -- ── Step 1: Generate unconstrained draft(s) ──────────────────────────────
     -- Two paths:
     --   A) spec_draft_fn provided → O(1) n-gram lookup, single deterministic
-    --      draft (best_k forced to 1 — identical n-gram lookups are pointless).
+    --      draft (best_k forced to 1 - identical n-gram lookups are pointless).
     --   B) draft_sampler → full decode pass, supports best_of_k.
     local drafts = {}
 
