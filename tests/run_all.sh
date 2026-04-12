@@ -40,15 +40,15 @@ run_suite() {
     fi
 }
 
-# ── Suite 1: Pure Lua — no model required ─────────────────────────────────────
+# ── Suite 1: Pure Lua - no model required ─────────────────────────────────────
 run_suite "Pure Lua (no model)" tests/test_pure.lua
 
 # ── Suite 2 & 3: Model-dependent ─────────────────────────────────────────────
 if [ -n "${ION7_MODEL:-}" ]; then
-    run_suite "Model — grammar sampler integration" tests/test_model.lua
-    run_suite "Model — DCCD end-to-end"             tests/test_dccd_model.lua
+    run_suite "Model - grammar sampler integration" tests/test_model.lua
+    run_suite "Model - DCCD end-to-end"             tests/test_dccd_model.lua
 else
-    printf "\n  \033[33m[SKIP]\033[0m Model tests — set ION7_MODEL=/path/to/model.gguf\n"
+    printf "\n  \033[33m[SKIP]\033[0m Model tests - set ION7_MODEL=/path/to/model.gguf\n"
     printf "         Also set ION7_CORE_PATH if ion7-core is not at ../ion7-core\n"
 fi
 

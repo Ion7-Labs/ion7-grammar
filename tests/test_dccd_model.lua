@@ -58,6 +58,13 @@ ion7.init({ log_level = 0, llama_path = lib_dir, bridge_path = lib_dir,
 -- Context must fit: prompt + max_draft_tokens + max_final_tokens
 local N_CTX = 512
 
+-- Thinking models (Qwen3.5, DeepSeek-R1) open a <think> block in the
+-- generation prefix that is never closed by the draft pass.  The constrained
+-- pass runs mid-think and produces wrong answers.  close_thinking=true injects
+-- "\n</think>\n" between draft injection and the constrained pass.
+-- Set to false when testing with a non-thinking model.
+local CLOSE_THINKING = true
+
 local fit   = ion7.Model.fit_params(model_path, { n_ctx_min = N_CTX })
 local model = ion7.Model.load(model_path, {
     n_gpu_layers = fit and fit.n_gpu_layers or 0,
@@ -143,6 +150,7 @@ T.test("generate() returns all expected fields with correct types", function()
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 64,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:generate()
@@ -181,6 +189,7 @@ T.test("enum grammar: final is one of the declared values", function()
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 80,
         max_final_tokens  = 16,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:generate()
@@ -203,6 +212,7 @@ T.test("regex grammar: final matches [0-9]+", function()
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 64,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:generate()
@@ -241,6 +251,7 @@ T.test("hand-built JSON grammar: final matches {answer:yes|no, confidence:int}",
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 96,
         max_final_tokens  = 32,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:generate()
@@ -279,6 +290,7 @@ T.test("draft is distinct from final (unconstrained vs constrained)", function()
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 128,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:generate()
@@ -306,6 +318,7 @@ T.test("DCCD vs standard constrained: both grammar-valid, different context", fu
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 64,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
     })
     local r = dc:generate()
 
@@ -336,13 +349,14 @@ T.test("n_past after generate() = prompt + n_draft_toks + n_tokens", function()
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 64,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:generate()
-    local expected = n_prompt + r.n_draft_toks + r.n_tokens
+    local expected = n_prompt + r.n_draft_toks + r.n_close_toks + r.n_tokens
     T.eq(ctx:n_past(), expected,
-        string.format("n_past = prompt(%d) + draft(%d) + final(%d) = %d",
-            n_prompt, r.n_draft_toks, r.n_tokens, expected))
+        string.format("n_past = prompt(%d) + draft(%d) + close(%d) + final(%d) = %d",
+            n_prompt, r.n_draft_toks, r.n_close_toks, r.n_tokens, expected))
     print_dccd(r, "n_past check")
 end)
 
@@ -357,6 +371,7 @@ T.test("second generate() call works correctly after first", function()
                 :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
             max_draft_tokens  = 64,
             max_final_tokens  = 8,
+            close_thinking    = CLOSE_THINKING,
         })
     end
 
@@ -400,6 +415,7 @@ T.test("on_draft_token and on_final_token reconstruct result exactly", function(
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 64,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
         on_draft_token    = function(p) draft_pieces[#draft_pieces+1] = p end,
         on_final_token    = function(p) final_pieces[#final_pieces+1] = p end,
     })
@@ -440,6 +456,7 @@ T.test("best_of(3) returns grammar-valid output", function()
             :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
         max_draft_tokens  = 64,
         max_final_tokens  = 8,
+        close_thinking    = CLOSE_THINKING,
     })
 
     local r = dc:best_of(3)
@@ -463,6 +480,7 @@ T.test("best_of(1) is equivalent to generate() with same greedy sampler", functi
                 :grammar(gbnf, "root", vocab):top_k(1):dist(42):build(vocab),
             max_draft_tokens  = 64,
             max_final_tokens  = 8,
+            close_thinking    = CLOSE_THINKING,
         })
     end
 

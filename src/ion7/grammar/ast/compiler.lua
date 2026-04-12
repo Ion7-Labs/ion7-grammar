@@ -1,23 +1,23 @@
---- @module ion7.grammar.compiler
+--- @module ion7.grammar.ast.compiler
 --- SPDX-License-Identifier: MIT
 --- AST → GBNF string compiler.
 ---
 --- Takes a set of named rules and produces a valid GBNF string for
---- llama.cpp's grammar-constrained sampler.
+--- llama.cpp's grammar-constrained sampler. Used internally by `Builder:compile()`.
 ---
---- GBNF format:
+--- GBNF syntax reference:
 ---   root  ::= expression
----   rule  ::= "text" | [a-z] | other-rule | ( a b ) | a* | a{n,m}
+---   rule  ::= "text" | [a-z] | other-rule | ( a b ) | a* | a+ | a? | a{n,m}
 ---
---- Rule names: [a-z][a-z0-9-]* - letters, digits, hyphens ONLY.
+--- Rule name constraint: `[a-z][a-z0-9-]*` — letters, digits, hyphens only.
 --- Underscores are NOT valid in this llama.cpp build.
+---
+--- @usage
+---   local compiler = require "ion7.grammar.ast.compiler"
+---   local gbnf = compiler.compile(rules, "root", true)
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0
-
---- AST node table. All fields depend on `kind`; see ast.lua for the full
---- per-kind field inventory.
---- @alias node table
 
 local compiler = {}
 
@@ -44,16 +44,12 @@ end
 local compile_node
 
 --- Compile a literal node to a double-quoted GBNF string.
---- @param  node  node  { kind="literal", value=string }
---- @return string
 --- @private
 local function compile_literal(node)
     return '"' .. escape_literal(node.value) .. '"'
 end
 
 --- Compile a char-class node to a GBNF bracket expression.
---- @param  node  node  { kind="char", spec=string, negated=bool }
---- @return string  e.g. "[a-z]" or "[^0-9]"
 --- @private
 local function compile_char(node)
     if node.negated then return '[^' .. node.spec .. ']'
@@ -61,33 +57,12 @@ local function compile_char(node)
 end
 
 --- Compile a ref node to its rule name.
---- @param  node  node  { kind="ref", name=string }
---- @return string
 --- @private
 local function compile_ref(node)
     return node.name
 end
 
---- Wrap a compiled expression in parentheses if it contains spaces and is
---- not already parenthesised. Used to ensure operators bind correctly.
---- @param  s  string  Compiled expression fragment.
---- @return string
---- @private
-local function maybe_paren(s)
-    if s:find(" ", 1, true) and not s:match("^%(") then
-        return "( " .. s .. " )"
-    end
-    return s
-end
-
 --- Compile a seq node: items joined by spaces.
----
---- Sequences inside `alt` or `rep` context are automatically parenthesised
---- so the enclosing operator binds to the whole sequence.
----
---- @param  node  node    { kind="seq", items=table }
---- @param  prec  string? Enclosing operator context: "alt" | "rep" | nil.
---- @return string
 --- @private
 local function compile_seq(node, prec)
     local parts = {}
@@ -95,8 +70,6 @@ local function compile_seq(node, prec)
         parts[#parts + 1] = compile_node(item, "seq")
     end
     local result = table.concat(parts, " ")
-    -- Sequences inside alt or rep MUST be grouped so the operator binds
-    -- to the whole sequence, not just the last token.
     if prec == "alt" or prec == "rep" then
         return "( " .. result .. " )"
     end
@@ -104,12 +77,6 @@ local function compile_seq(node, prec)
 end
 
 --- Compile an alt node: alternatives joined by " | ".
----
---- Alternatives inside `seq` or `rep` context are automatically parenthesised.
----
---- @param  node  node    { kind="alt", items=table }
---- @param  prec  string? Enclosing operator context: "seq" | "rep" | nil.
---- @return string
 --- @private
 local function compile_alt(node, prec)
     local parts = {}
@@ -117,7 +84,6 @@ local function compile_alt(node, prec)
         parts[#parts + 1] = compile_node(item, "alt")
     end
     local result = table.concat(parts, " | ")
-    -- Alternatives inside seq or rep must be grouped.
     if prec == "seq" or prec == "rep" then
         return "( " .. result .. " )"
     end
@@ -125,26 +91,15 @@ local function compile_alt(node, prec)
 end
 
 --- Compile a rep node using GBNF suffix operators or {n,m} notation.
----
---- Common cases use the compact suffixes *, +, ?. All other bounded
---- repetitions use the GBNF {n,m} form, which is cleaner and correct
---- for multi-token inner expressions.
----
---- @param  node  node  { kind="rep", node=node, min=number, max=number }
---- @return string
 --- @private
 local function compile_rep(node)
     local inner = compile_node(node.node, "rep")
     local min, max = node.min, node.max
 
-    -- Compact suffixes for the common cases.
     if min == 0 and max == -1 then return inner .. "*" end
     if min == 1 and max == -1 then return inner .. "+" end
     if min == 0 and max ==  1 then return inner .. "?" end
 
-    -- Use GBNF {n,m} notation for bounded repetitions.
-    -- This correctly handles multi-token inner expressions (a manual
-    -- expansion like a b? a b? ... was broken for seq inner nodes).
     local max_str = max == -1 and "" or tostring(max)
     if min == max then
         return inner .. "{" .. min .. "}"
@@ -153,22 +108,16 @@ local function compile_rep(node)
     end
 end
 
---- Compile a group node: wraps inner expression in explicit parentheses.
---- @param  node  node  { kind="group", node=node }
---- @return string
+--- Compile a group node.
 --- @private
 local function compile_group(node)
     return "( " .. compile_node(node.node) .. " )"
 end
 
 --- Dispatch compilation to the correct handler based on node.kind.
----
---- @param  node  node    AST node to compile.
---- @param  prec  string? Enclosing context hint passed to seq/alt handlers.
---- @return string  GBNF fragment for this node.
 --- @private
 compile_node = function(node, prec)
-    if not node then error("[ion7.grammar.compiler] nil node") end
+    if not node then error("[ion7.grammar.ast.compiler] nil node") end
     local k = node.kind
     if     k == "literal" then return compile_literal(node)
     elseif k == "char"    then return compile_char(node)
@@ -177,7 +126,7 @@ compile_node = function(node, prec)
     elseif k == "alt"     then return compile_alt(node, prec)
     elseif k == "rep"     then return compile_rep(node)
     elseif k == "group"   then return compile_group(node)
-    else error("[ion7.grammar.compiler] unknown node kind: " .. tostring(k))
+    else error("[ion7.grammar.ast.compiler] unknown node kind: " .. tostring(k))
     end
 end
 
@@ -189,9 +138,9 @@ end
 --- definition order. When `whitespace` is true and a `ws` rule is missing
 --- but referenced, a default `ws ::= [ \t\n]*` rule is appended.
 ---
---- @param  rules       table   Array of { name, body } pairs.
---- @param  root        string? Root rule name (default: "root").
---- @param  whitespace  bool?   Inject ws rule if referenced but absent (default: true).
+--- @param  rules       table    Array of { name, body } pairs.
+--- @param  root        string?  Root rule name (default: "root").
+--- @param  whitespace  boolean? Inject ws rule if referenced but absent (default: true).
 --- @return string  GBNF string (no trailing newline).
 --- @error  When the root rule is not found in the rules array.
 function compiler.compile(rules, root, whitespace)
@@ -202,8 +151,6 @@ function compiler.compile(rules, root, whitespace)
     for _, r in ipairs(rules) do by_name[r.name] = true end
 
     -- Inject ws ONLY when actually referenced by another rule.
-    -- Unreferenced rules cause issues in some llama.cpp versions.
-    -- \r removed: not supported in all llama.cpp GBNF builds.
     if whitespace and not by_name["ws"] then
         local ws_referenced = false
         local function scan(node)
@@ -245,7 +192,7 @@ function compiler.compile(rules, root, whitespace)
     end
 
     if not has_root then
-        error("[ion7.grammar.compiler] root rule '" .. root .. "' not found")
+        error("[ion7.grammar.ast.compiler] root rule '" .. root .. "' not found")
     end
 
     return table.concat(lines, "\n")

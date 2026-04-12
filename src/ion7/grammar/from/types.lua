@@ -1,57 +1,34 @@
---- @module ion7.grammar.types
+--- @module ion7.grammar.from.types
 --- SPDX-License-Identifier: MIT
 --- Lua type annotations → GBNF grammars.
 ---
---- Converts simple Lua type descriptions into grammars without having
---- to write JSON Schema or GBNF by hand. Designed for tool-calling and
---- structured output in agentic applications.
+--- Converts simple Lua type descriptions into grammars without writing
+--- JSON Schema or GBNF by hand. Designed for tool-calling and structured
+--- output in agentic applications.
 ---
 --- Type syntax:
----   "string"              Any JSON string
----   "number"              Any JSON number
----   "integer"             Any JSON integer
----   "boolean"             true | false
----   "null"                null
----   { "string" }          Array of strings
----   { "integer" }         Array of integers
----   { key = "type", ... } Object with typed fields
----   { key = { "type" } }  Object with array-typed fields
----   { key = { a="t" } }   Nested objects
----   "string?"             Optional string (null | string)
+---   `"string"`              Any JSON string
+---   `"number"`              Any JSON number
+---   `"integer"`             Any JSON integer
+---   `"boolean"`             `true | false`
+---   `"null"`                `null`
+---   `"any"`                 Unconstrained
+---   `"T?"`                  Optional — `null | T`
+---   `{ "T" }`               Array of T
+---   `{ key = "T", ... }`    Object with typed fields (all required)
+---   `{ ["key?"] = "T" }`    Optional field (key ending with `?`)
+---   `{ key = { "T" } }`     Field whose value is an array
 ---
 --- @usage
----   local Types = require "ion7.grammar.types"
----
----   -- Simple struct
----   local g = Types.from_type({
----       name    = "string",
----       age     = "integer",
----       active  = "boolean",
----       tags    = { "string" },
----   })
----   print(g:to_gbnf())
----
----   -- Nested
----   local g = Types.from_type({
----       user = {
----           id    = "integer",
----           email = "string",
----       },
----       count = "integer",
----   })
----
----   -- With required fields (all are required by default)
----   local g = Types.from_type({
----       name   = "string",
----       ["age?"] = "integer",   -- optional field (key ends with ?)
----   })
+---   local Types = require "ion7.grammar.from.types"
+---   local b = Types.from_type({ name = "string", age = "integer?" })
+---   print(b:compile())
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0
 
-local ast     = require "ion7.grammar.ast"
-local Builder = require "ion7.grammar.builder"
-local json_m  = require "ion7.grammar.json"
+local json_m  = require "ion7.grammar.from.json"
+local Builder = require "ion7.grammar.ast.builder"
 
 local Types = {}
 
@@ -79,8 +56,6 @@ local Types = {}
 ---
 --- @param  typ  string|table  Type annotation in ion7 type syntax.
 --- @return table  JSON Schema draft-07 compatible table.
---- @error  If a primitive type string is unrecognised.
---- @error  If typ is neither a string nor a table.
 function Types.to_schema(typ)
     if type(typ) == "string" then
         -- Strip optional marker
@@ -95,7 +70,7 @@ function Types.to_schema(typ)
         if typ == "boolean" then return { type = "boolean" } end
         if typ == "null"    then return { type = "null" }    end
         if typ == "any"     then return {}                   end
-        error("[ion7.grammar.types] unknown primitive type: '" .. typ .. "'")
+        error("[ion7.grammar.from.types] unknown primitive type: '" .. typ .. "'")
     end
 
     if type(typ) == "table" then
@@ -114,20 +89,19 @@ function Types.to_schema(typ)
         for k, v in pairs(typ) do
             if type(k) == "string" then
                 local field_name = k
-                local optional   = false
-                -- Support "field?" syntax for optional fields
+                local is_optional = false
                 local base_key = k:match("^(.-)%?$")
                 if base_key then
-                    field_name = base_key
-                    optional   = true
+                    field_name   = base_key
+                    is_optional  = true
                 end
                 props[field_name] = Types.to_schema(v)
-                if not optional then
+                if not is_optional then
                     required[#required + 1] = field_name
                 end
             end
         end
-        -- Sort required for deterministic output
+        -- Sort required for deterministic output (stable KV prefix cache)
         table.sort(required)
         return {
             type       = "object",
@@ -136,38 +110,29 @@ function Types.to_schema(typ)
         }
     end
 
-    error("[ion7.grammar.types] unsupported type annotation: " .. type(typ))
+    error("[ion7.grammar.from.types] unsupported type annotation: " .. type(typ))
 end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
 
---- Build a Grammar from a Lua type annotation.
+--- Build a Builder from a Lua type annotation.
+---
+--- Avoids the circular dep of calling Grammar.from_json_schema() by going
+--- directly to json_m.to_rules() + Builder — same pipeline, no middle layer.
 ---
 --- @param  typ   string|table  Type annotation (see module docs).
 --- @param  root  string?       Root rule name (default: "root").
---- @return Grammar_obj
----
---- @usage
----   local g = Types.from_type({
----       name    = "string",
----       age     = "integer",
----       ["score?"] = "number",   -- optional
----       tags    = { "string" },  -- array of strings
----   })
----   -- Use with ion7-core:
----   local sampler = ion7.Sampler.chain()
----       :grammar(g:to_gbnf(), "root", vocab._ptr)
----       :temperature(0.1)
----       :dist()
----       :build(vocab)
+--- @return Builder
 function Types.from_type(typ, root)
     root = root or "root"
     local schema = Types.to_schema(typ)
-    local Grammar_init = require "ion7.grammar"
-    return Grammar_init.from_json_schema(schema, root)
+    local rules, root_name = json_m.to_rules(schema, root)
+    local b = Builder.new({ root = root_name })
+    for _, r in ipairs(rules) do b:rule(r.name, r.body) end
+    return b
 end
 
---- Build a Grammar for a named function signature.
+--- Build a Builder for a named function signature.
 ---
 --- Generates a JSON object grammar for calling a function with typed args.
 --- Equivalent to `from_type` but documents the semantic intent.
@@ -175,17 +140,10 @@ end
 --- @param  name    string  Function/tool name (for documentation only).
 --- @param  params  table   Parameter type annotations { param = type, ... }.
 --- @param  root    string? Root rule name (default: "root").
---- @return Grammar_obj
----
---- @usage
----   local g = Types.from_function("search", {
----       query  = "string",
----       limit  = "integer",
----       ["offset?"] = "integer",
----   })
+--- @return Builder
 function Types.from_function(name, params, root)
     assert(type(name) == "string",
-        "[ion7.grammar.types] function name must be a string")
+        "[ion7.grammar.from.types] function name must be a string")
     return Types.from_type(params, root)
 end
 
