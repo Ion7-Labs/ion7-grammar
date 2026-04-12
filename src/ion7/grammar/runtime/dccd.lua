@@ -146,7 +146,7 @@ function DCCD:generate(opts)
     local best_k = opts.best_of_k or self._best_k
 
     local pre_snap = ctx:snapshot()
-    local pre_n    = ctx._n_past
+    local pre_n    = ctx:n_past()
 
     -- ── Step 1: Generate unconstrained draft(s) ──────────────────────────────
     local drafts = {}
@@ -155,7 +155,7 @@ function DCCD:generate(opts)
         -- Fast path: speculative n-gram draft (no decode, no GPU, microseconds).
         local last_tok = opts.last_token or self._last_tok
         ctx:restore(pre_snap)
-        ctx._n_past = pre_n
+        ctx:set_n_past(pre_n)
 
         local spec_toks = self._spec_fn(last_tok) or {}
         if #spec_toks > 0 then
@@ -175,7 +175,7 @@ function DCCD:generate(opts)
         local stream_draft = (best_k == 1) and self._on_draft or nil
         for _ = 1, best_k do
             ctx:restore(pre_snap)
-            ctx._n_past = pre_n
+            ctx:set_n_past(pre_n)
             local text, toks = self:_run_pass(self._draft_s, max_d, stream_draft)
             drafts[#drafts + 1] = { text = text, toks = toks }
         end
@@ -189,7 +189,7 @@ function DCCD:generate(opts)
 
     for _, draft in ipairs(drafts) do
         ctx:restore(pre_snap)
-        ctx._n_past = pre_n
+        ctx:set_n_past(pre_n)
 
         -- Inject draft tokens into the KV cache (core of DCCD)
         for _, tok in ipairs(draft.toks) do

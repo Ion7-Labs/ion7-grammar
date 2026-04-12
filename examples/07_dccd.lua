@@ -162,7 +162,7 @@ io.write("\n")
 -- ── Example 3: best_of(k) - multiple drafts, pick best ───────────────────────
 -- Generate k unconstrained drafts. For each, inject into KV and run
 -- constrained pass. Keep the result with the longest constrained output
--- (proxy for highest feasibility - see §Limitations in PUBLIC_API.md).
+-- (proxy for highest feasibility - longer constrained output ≈ more grammar-feasible draft).
 
 io.write("── 3. best_of(3) - pick most feasible draft ────────────────────\n")
 
