@@ -1,4 +1,3 @@
---- @module ion7.grammar.builder
 --- SPDX-License-Identifier: MIT
 --- Fluent API for building GBNF grammars programmatically.
 ---
@@ -6,54 +5,31 @@
 --- to define rules, then :compile() to get the GBNF string.
 ---
 --- @usage
+---   local Builder = require "ion7.grammar.ast.builder"
 ---   local Grammar = require "ion7.grammar"
 ---
----   local g = Grammar.builder()
----       :rule("root",
----           Grammar.seq(
----               Grammar.literal("{"),
----               Grammar.ref("ws"),
----               Grammar.ref("members"),
----               Grammar.ref("ws"),
----               Grammar.literal("}")
----           )
----       )
----       :rule("members",
----           Grammar.seq(
----               Grammar.ref("pair"),
----               Grammar.star(Grammar.seq(
----                   Grammar.literal(","),
----                   Grammar.ref("ws"),
----                   Grammar.ref("pair")
----               ))
----           )
----       )
+---   local b = Builder.new()
+---       :rule("root", Grammar.seq(Grammar.literal("{"), Grammar.ref("ws"), Grammar.literal("}")))
 ---       :compile()
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0
 
-local ast      = require "ion7.grammar.ast"
-local compiler = require "ion7.grammar.compiler"
+local compiler = require "ion7.grammar.ast.compiler"
 
 --- @class Builder
---- Fluent grammar builder: accumulates named rules and compiles to GBNF.
---- @field _rules  table   Ordered array of { name, body } pairs.
---- @field _names  table   Set of defined rule names for fast dedup lookup.
---- @field _root   string  Current root rule name.
 local Builder = {}
 Builder.__index = Builder
 
 --- Create a new GrammarBuilder.
----
 --- @param  opts  table?
 ---   opts.root  string?  Root rule name (default: "root").
 --- @return Builder
 function Builder.new(opts)
     opts = opts or {}
     return setmetatable({
-        _rules = {},          -- ordered array of { name, body }
-        _names = {},          -- set of defined names (dedup check)
+        _rules = {},
+        _names = {},
         _root  = opts.root or "root",
     }, Builder)
 end
@@ -62,12 +38,11 @@ end
 ---
 --- Calling :rule() with the same name twice replaces the previous definition.
 ---
---- @param  name  string  Rule name. Must match [a-zA-Z_][a-zA-Z0-9_-]*.
---- @param  body  node    AST node (from Grammar.seq, Grammar.alt, etc.)
+--- @param  name  string  Rule name.
+--- @param  body  table   AST node.
 --- @return Builder  self (fluent)
 function Builder:rule(name, body)
     if self._names[name] then
-        -- Replace existing rule in-place to preserve definition order.
         for i, r in ipairs(self._rules) do
             if r.name == name then
                 self._rules[i] = { name = name, body = body }
@@ -81,8 +56,7 @@ function Builder:rule(name, body)
 end
 
 --- Set the root rule name used by :compile().
----
---- @param  name  string  Name of the rule to treat as root.
+--- @param  name  string
 --- @return Builder  self
 function Builder:root(name)
     self._root = name
@@ -90,12 +64,8 @@ function Builder:root(name)
 end
 
 --- Merge rules from another Builder or rule list.
----
 --- Rules whose names already exist in self are skipped (no overwrite).
---- Useful for composing grammars, e.g. embedding a JSON grammar into a
---- larger one.
----
---- @param  other  Builder|table  Another builder or { name, body } array.
+--- @param  other  Builder|table
 --- @return Builder  self
 function Builder:merge(other)
     local rules = type(other) == "table" and other._rules or other
@@ -108,10 +78,9 @@ function Builder:merge(other)
 end
 
 --- Compile all rules to a GBNF string.
----
 --- @param  opts  table?
----   opts.whitespace  bool?  Auto-inject ws rule when referenced (default: true).
---- @return string  GBNF string.
+---   opts.whitespace  boolean?  Auto-inject ws rule when referenced (default: true).
+--- @return string
 function Builder:compile(opts)
     opts = opts or {}
     return compiler.compile(
@@ -122,9 +91,6 @@ function Builder:compile(opts)
 end
 
 --- Return a shallow copy of this builder's rule list.
----
---- Each entry is a table with keys `name` (string) and `body` (node).
----
 --- @return table  Array of { name, body } pairs.
 function Builder:rules()
     local out = {}
@@ -133,7 +99,6 @@ function Builder:rules()
 end
 
 --- List defined rule names in definition order.
----
 --- @return table  Array of rule name strings.
 function Builder:names()
     local out = {}

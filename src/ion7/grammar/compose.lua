@@ -11,7 +11,7 @@
 --- @version 0.1.0
 
 local ast     = require "ion7.grammar.ast"
-local Builder = require "ion7.grammar.builder"
+local Builder = require "ion7.grammar.ast.builder"
 
 local Compose = {}
 
@@ -187,7 +187,7 @@ end
 --- @param  g    Grammar_obj|Builder
 --- @param  pre  string  Prefix literal (e.g. "[").
 --- @param  suf  string  Suffix literal (e.g. "]").
---- @param  ws   bool?   Insert whitespace between delimiters (default: true).
+--- @param  ws   boolean?   Insert whitespace between delimiters (default: true).
 --- @return Builder
 function Compose.wrap(g, pre, suf, ws)
     if ws == nil then ws = true end

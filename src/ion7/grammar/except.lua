@@ -46,8 +46,8 @@
 --- @author Ion7-Labs
 --- @version 0.1.0
 
-local ast    = require "ion7.grammar.ast"
-local Builder = require "ion7.grammar.builder"
+local ast     = require "ion7.grammar.ast"
+local Builder = require "ion7.grammar.ast.builder"
 
 local Except = {}
 
@@ -58,7 +58,7 @@ local Except = {}
 ---
 --- @param  base_spec  string   Base character class spec (e.g. "a-zA-Z0-9").
 --- @param  exclude    table    Characters to exclude (e.g. {"a","e","i"}).
---- @param  negated    bool?    Whether base_spec is already negated.
+--- @param  negated    boolean?    Whether base_spec is already negated.
 --- @return node  AST char node.
 ---
 --- @usage
@@ -67,31 +67,47 @@ local Except = {}
 ---   -- Digits except zero
 ---   Except.except_chars("0-9", {"0"})
 function Except.except_chars(base_spec, exclude, negated)
-    -- Build exclude set
+    -- Build exclude set (raw bytes, for lookup)
     local excl = {}
     for _, c in ipairs(exclude or {}) do excl[c] = true end
 
-    -- Expand base spec to individual chars
+    -- Encode a raw byte as a GBNF char-class fragment.
+    -- Control characters and GBNF-special chars must be escaped here;
+    -- doing it post-hoc on table.concat() misses raw \n/\t bytes.
+    local function encode(ch)
+        if     ch == '\n' then return '\\n'
+        elseif ch == '\t' then return '\\t'
+        elseif ch == '\r' then return '\\r'
+        elseif ch == '\\' then return '\\\\'
+        elseif ch == ']'  then return '\\]'
+        elseif ch == '-'  then return '\\-'
+        else                   return ch
+        end
+    end
+
+    -- Expand base spec (GBNF char-class syntax) to encoded fragments
     local all_chars = {}
     local i = 1
     local s = base_spec
     while i <= #s do
         local c = s:sub(i, i)
         if c == '\\' and i < #s then
+            -- Unescape to raw byte for exclusion check, then re-encode
             local esc = s:sub(i+1, i+1)
-            local ch = esc == 'n' and '\n' or esc == 't' and '\t' or esc
-            if not excl[ch] then all_chars[#all_chars+1] = ch end
+            local ch = esc == 'n' and '\n' or esc == 't' and '\t'
+                    or esc == 'r' and '\r' or esc
+            if not excl[ch] then all_chars[#all_chars+1] = encode(ch) end
             i = i + 2
         elseif i + 2 <= #s and s:sub(i+1,i+1) == '-' then
             local from = string.byte(c)
             local to   = string.byte(s, i+2)
             for code = from, to do
                 local ch = string.char(code)
-                if not excl[ch] then all_chars[#all_chars+1] = ch end
+                if not excl[ch] then all_chars[#all_chars+1] = encode(ch) end
             end
             i = i + 3
         else
-            if not excl[c] then all_chars[#all_chars+1] = c end
+            if not excl[c] then all_chars[#all_chars+1] = encode(c) end
             i = i + 1
         end
     end
@@ -101,12 +117,7 @@ function Except.except_chars(base_spec, exclude, negated)
         return ast.literal("")
     end
 
-    -- Rebuild spec from remaining chars
-    -- Group into ranges where possible (simplified: just list chars)
-    local spec = table.concat(all_chars)
-    -- Escape special chars in spec
-    spec = spec:gsub("\\", "\\\\"):gsub("%]", "\\]"):gsub("-", "\\-")
-    return ast.char(spec, negated or false)
+    return ast.char(table.concat(all_chars), negated or false)
 end
 
 --- Match any value from a universe EXCEPT the excluded values.
@@ -139,7 +150,7 @@ function Except.except_values(universe, exclude, name)
         error("[ion7.grammar.except] except_values: no values remain after exclusion")
     end
 
-    local Dynamic = require "ion7.grammar.dynamic"
+    local Dynamic = require "ion7.grammar.from.dynamic"
     return Dynamic.from_enum(name, allowed)
 end
 

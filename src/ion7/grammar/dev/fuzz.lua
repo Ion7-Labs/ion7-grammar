@@ -1,6 +1,5 @@
---- @module ion7.grammar.fuzz
 --- SPDX-License-Identifier: MIT
---- Grammar fuzzing - generate random valid strings without a model.
+--- Grammar fuzzing — generate random valid strings without a model.
 ---
 --- Given a Grammar, produces random strings that are guaranteed to match
 --- the grammar. Useful for:
@@ -9,29 +8,7 @@
 ---   - Debugging: "does my grammar actually allow what I think it allows?"
 ---   - Benchmarking grammar complexity
 ---
---- This is pure Lua - zero model, zero GPU. Instant.
----
---- Algorithm: recursive AST walker with randomized choices.
----   alt   → pick one alternative uniformly at random
----   rep   → pick a count between min and max (capped at max_rep)
----   seq   → concatenate all items
----   char  → pick a random char from the class
----   lit   → return verbatim
----   ref   → recurse (depth-limited to prevent infinite recursion)
----
---- @usage
----   local Grammar = require "ion7.grammar"
----
----   local g = Grammar.from_json_schema({ type = "object",
----       properties = { name = { type = "string" }, age = { type = "integer" } },
----       required = { "name", "age" } })
----
----   local examples = Grammar.fuzz(g, { count = 5, seed = 42 })
----   for _, s in ipairs(examples) do print(s) end
----
----   -- Validate grammar before using with LLM
----   local ok, err = Grammar.validate_fuzz(g, { count = 20 })
----   if not ok then print("Grammar issue: " .. err) end
+--- This is pure Lua — zero model, zero GPU. Instant.
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0
@@ -45,9 +22,7 @@ local Fuzzer = {}
 local bit = require "bit"
 
 local function make_rng(seed)
-    -- Mix seed with a constant (Wang hash) to avoid clustering near zero
-    -- for small seeds. Without mixing, state/0x7FFFFFFF ≈ 0 for many
-    -- iterations, so rng_int always returns the lowest index.
+    -- Mix seed with a constant (Wang hash) to avoid clustering near zero.
     local s = seed or os.time()
     s = bit.bxor(s, 0x9e3779b9)
     s = bit.band(s, 0x7FFFFFFF)
@@ -71,13 +46,11 @@ end
 
 -- ── Character class expander ──────────────────────────────────────────────────
 
--- Expand a char class spec to an array of possible characters
 local function expand_char_class(spec, negated)
     local chars = {}
     local seen  = {}
     local i = 1
 
-    -- Parse the spec string
     while i <= #spec do
         local c = spec:sub(i, i)
         if c == '\\' and i < #spec then
@@ -90,7 +63,6 @@ local function expand_char_class(spec, negated)
             i = i + 2
             if not seen[ch] then seen[ch]=true; chars[#chars+1]=ch end
         elseif i + 2 <= #spec and spec:sub(i+1,i+1) == '-' then
-            -- Range a-z
             local from = string.byte(c)
             local to   = string.byte(spec, i+2)
             for code = from, to do
@@ -107,7 +79,6 @@ local function expand_char_class(spec, negated)
     if not negated then
         return chars
     else
-        -- Negated: return printable ASCII chars not in the set
         local neg = {}
         for code = 32, 126 do
             local ch = string.char(code)
@@ -119,20 +90,6 @@ end
 
 -- ── Biased repetition count ───────────────────────────────────────────────────
 
---- Pick a repetition count with a distribution that favours variety.
----
---- The plain uniform distribution over [0, max_rep] produces too many
---- zero-length strings (empty `*` expansions) and makes all samples look
---- similar. The biased version:
----   - When min=0, only produces 0 with 15% probability; the rest is
----     distributed uniformly over [1, max_n].
----   - Otherwise uses a triangular-ish distribution (average of two
----     uniform draws) to cluster around the middle of the range.
----
---- @param  rng    function  RNG function returning [0,1).
---- @param  min_n  number    Minimum count.
---- @param  max_n  number    Maximum count.
---- @return number  Chosen count in [min_n, max_n].
 local function biased_rep(rng, min_n, max_n)
     if min_n == max_n then return min_n end
     if min_n == 0 and max_n >= 1 then
@@ -142,7 +99,6 @@ local function biased_rep(rng, min_n, max_n)
         local b = rng_int(rng, 1, max_n)
         return math.floor((a + b) / 2 + 0.5)
     end
-    -- Triangular: average of two uniform draws reduces variance
     local a = rng_int(rng, min_n, max_n)
     local b = rng_int(rng, min_n, max_n)
     return math.floor((a + b) / 2 + 0.5)
@@ -150,8 +106,6 @@ end
 
 -- ── AST walker ────────────────────────────────────────────────────────────────
 
---- Recursive AST walker. Returns the generated string fragment.
---- @private
 local function walk(node, rules_by_name, rng, depth, opts)
     if depth > (opts.max_depth or 20) then return "" end
 
@@ -178,14 +132,7 @@ local function walk(node, rules_by_name, rng, depth, opts)
         return table.concat(parts)
 
     elseif k == "alt" then
-        -- Shuffle-based selection: build a random permutation of indices so
-        -- that when generating multiple samples, each alternative gets visited
-        -- before any is repeated. The permutation is seeded per-call so it
-        -- differs across samples (per-sample RNG handles this automatically).
-        local n = #node.items
-        -- Simple Fisher-Yates on a local copy to pick a random index
-        -- without needing to maintain external state.
-        local idx = rng_int(rng, 1, n)
+        local idx = rng_int(rng, 1, #node.items)
         return walk(node.items[idx], rules_by_name, rng, depth, opts)
 
     elseif k == "rep" then
@@ -213,48 +160,33 @@ end
 
 --- Generate random valid strings from a grammar.
 ---
---- @param  grammar  any  The grammar to fuzz.
+--- @param  grammar  any  Grammar_obj or Builder.
 --- @param  opts     table?
 ---   opts.count      number?  Number of strings to generate (default: 5).
 ---   opts.seed       number?  RNG seed for reproducibility (default: random).
 ---   opts.max_depth  number?  Max recursion depth (default: 20).
 ---   opts.max_rep    number?  Max repetitions for * and + (default: 4).
 ---   opts.root       string?  Root rule name (default: "root").
---- @return table  Array of generated strings.
+--- @return table   Array of generated strings.
 --- @return number  The seed used (for reproduction).
----
---- @usage
----   local Grammar = require "ion7.grammar"
----
----   local g = Grammar.from_enum("color", { "red", "green", "blue" })
----   local samples = Grammar.fuzz(g, { count = 3, seed = 1 })
----   -- { "green", "red", "blue" }
----
----   local g = Grammar.from_regex("\\d{1,4}")
----   local samples = Grammar.fuzz(g, { count = 5 })
----   -- { "7", "42", "1337", "0", "999" }  (random)
 function Fuzzer.fuzz(grammar, opts)
     opts = opts or {}
-    local count     = opts.count     or 5
-    local seed      = opts.seed      or os.time()
-    local root_name = opts.root      or "root"
+    local count     = opts.count or 5
+    local seed      = opts.seed  or os.time()
+    local root_name = opts.root  or "root"
     local rng       = make_rng(seed)
 
-    -- Get rules from grammar
     local b = grammar._builder or grammar
     local rules = b._rules or {}
 
-    -- Index by name
     local by_name = {}
     for _, r in ipairs(rules) do by_name[r.name] = r end
 
-    -- Find root
     local root_rule = by_name[root_name]
     if not root_rule then
-        -- Try first rule
         root_rule = rules[1]
         if not root_rule then
-            error("[ion7.grammar.fuzz] no rules found in grammar")
+            error("[ion7.grammar.dev.fuzz] no rules found in grammar")
         end
     end
 
@@ -268,13 +200,10 @@ end
 
 --- Check that a grammar can produce non-empty valid strings.
 ---
---- Generates `count` examples and verifies none are empty (which would
---- indicate the grammar is too restrictive or has a bug).
----
 --- @param  grammar  any
---- @param  opts     table?   Same as fuzz(), plus opts.allow_empty (bool).
---- @return boolean  ok   true if grammar produces valid non-empty output.
---- @return string?  err  Error description if ok is false, otherwise nil.
+--- @param  opts     table?  Same as fuzz(), plus opts.allow_empty (boolean).
+--- @return boolean  ok
+--- @return string?  err
 function Fuzzer.validate(grammar, opts)
     opts = opts or {}
     local allow_empty = opts.allow_empty or false
@@ -301,8 +230,6 @@ function Fuzzer.validate(grammar, opts)
 end
 
 --- Generate exactly one random valid string.
---- Convenience wrapper around fuzz().
----
 --- @param  grammar  any
 --- @param  opts     table?  { seed, max_depth, max_rep, root }
 --- @return string
