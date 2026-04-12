@@ -1,9 +1,10 @@
+--- @module ion7.grammar.ast.walk
 --- SPDX-License-Identifier: MIT
 --- AST traversal utilities shared across ion7-grammar modules.
 ---
---- Centralises the two walk patterns that used to be duplicated between
---- debug.lua (collect_refs / build_ref_counts) and init.lua
---- (_first_literals / trigger_words).  Both callers now require this module.
+--- Centralises the two walk patterns used by `debug.lua` (ref counting)
+--- and `grammar_obj.lua` (first-set computation for `trigger_words`).
+--- Internal module — not part of the public `Grammar.*` API.
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

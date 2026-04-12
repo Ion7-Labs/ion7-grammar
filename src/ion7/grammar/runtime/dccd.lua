@@ -1,42 +1,33 @@
+--- @module ion7.grammar.runtime.dccd
 --- SPDX-License-Identifier: MIT
---- Draft-Conditioned Constrained Decoding (DCCD) for ion7-grammar.
+--- Draft-Conditioned Constrained Decoding (DCCD, arXiv:2603.03305).
 ---
---- Implementation of the DCCD algorithm (arXiv:2603.03305, Feb 2026)
---- using ion7-core's KV cache snapshot/restore primitives.
+--- Standard constrained decoding distorts the token probability distribution
+--- step by step — the "projection tax" — producing outputs that are
+--- syntactically valid but semantically wrong.
 ---
---- The problem with standard constrained decoding:
----   When the grammar forces tokens the model wouldn't naturally pick,
----   the probability distribution gets distorted token by token - the
----   "projection tax". This cascades into semantically wrong outputs
----   that are nonetheless syntactically valid.
+--- DCCD fixes this in two training-free steps:
+---   1. Generate an unconstrained draft `y ~ p_draft(x)`.
+---   2. Restore KV to post-prompt, inject the draft tokens, then run
+---      grammar-constrained decoding on the augmented context. The model
+---      attends to its own unconstrained plan while being forced to produce
+---      grammar-valid tokens.
 ---
---- DCCD solution (two-step, training-free):
----   Step 1: Generate an unconstrained draft y ~ p_draft(x).
----   Step 2: Restore KV to post-prompt, decode draft tokens into the KV cache,
----           then run grammar-constrained decoding on the augmented context
----           (prompt + draft + constrained_tokens_so_far).
----   The draft shifts probability mass toward valid continuations, reducing the
----   "projection tax". The model attends to its own unconstrained plan while
----   being forced to produce grammar-valid tokens.
+--- Accuracy gains per the paper: +24 pp on structured reasoning (GSM8K).
+--- Win rate vs standard constrained decoding: ~80% on summarization.
 ---
---- Our implementation leverages ion7-core:
----   - ctx:snapshot() / ctx:restore()  - KV cache checkpointing
----   - ctx:decode_single()             - token-by-token KV injection
----   - Two samplers: free (step 1) and grammar-constrained (step 2)
+--- Requires ion7-core (uses `ctx:snapshot()` / `ctx:restore()`).
 ---
---- Accuracy improvements per the paper: +24pp on structured reasoning (GSM8K).
---- Win rate vs standard constrained decoding: ~80% on summarization tasks.
----
---- Limitations vs the paper:
----   - best_of_k selection uses constrained output length as a proxy for the
----     paper's cumulative log feasible mass S(k) = Σ log(α̃_t). Exact S(k)
----     requires the per-step probability mass of valid tokens before grammar
----     masking. ion7_csampler with grammar_first=0 defers grammar to last and
----     gives access to the pre-grammar distribution, but
----     ion7_csampler_get_candidates() is not exposed in the bridge.
----   - With k=1 (the default), our implementation is fully faithful to the paper.
----   - When spec_draft_fn is provided, best_of_k is forced to 1 (n-gram drafts
----     are deterministic; running K identical drafts is pointless).
+--- @usage
+---   local dc = Grammar.dccd(ctx, vocab, {
+---       draft_sampler     = free_sampler,
+---       constrain_sampler = grammar_sampler,
+---       max_draft_tokens  = 128,
+---       close_thinking    = true,   -- required for Qwen3.5 / DeepSeek-R1
+---   })
+---   local result = dc:generate()
+---   print(result.text)   -- grammar-valid output
+---   print(result.draft)  -- unconstrained draft for debugging
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

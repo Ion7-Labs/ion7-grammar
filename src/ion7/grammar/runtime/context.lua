@@ -1,32 +1,25 @@
+--- @module ion7.grammar.runtime.context
 --- SPDX-License-Identifier: MIT
 --- Stateful grammar that evolves with the conversation.
 ---
---- Standard grammars are static per request. GrammarContext is a live
+--- Standard grammars are static per request. `GrammarContext` is a live
 --- object that accumulates knowledge and updates the grammar as your
---- application state changes - without rebuilding from scratch each time.
----
---- Use cases:
----   - SQL: learn table/column names as they're discovered in the conversation
----   - Agents: register tools as they become available
----   - Multi-turn: grammar grows with each user message (new entities, refs)
----   - Streaming schemas: schema arrives incrementally from an API
+--- application state changes — without rebuilding from scratch each turn.
 ---
 --- @usage
 ---   local gc = Grammar.context()
 ---
----   -- Learn schema incrementally
+---   -- Register live schema
 ---   gc:learn_enum("status", { "pending", "active", "closed" })
----   gc:learn_table("users", { "id", "name", "email", "created_at" })
+---   gc:learn_table("users", { "id", "name", "email" })
 ---
----   -- Use current grammar
+---   -- Compile current grammar (cached until invalidated)
 ---   local g = gc:current()
----   sampler = Grammar.sampler(g, vocab)
 ---
----   -- Conversation evolves → grammar evolves
----   gc:learn_table("orders", { "id", "user_id", "total", "status" })
----   sampler = Grammar.sampler(gc:current(), vocab)  -- updated
+---   -- Grammar grows with the conversation
+---   gc:learn_table("orders", { "id", "user_id", "total" })
 ---
----   -- Snapshot / restore for branching conversations
+---   -- Branch and restore
 ---   local snap = gc:snapshot()
 ---   gc:learn_enum("color", { "red", "blue" })
 ---   gc:restore(snap)  -- back to before color

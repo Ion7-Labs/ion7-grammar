@@ -1,8 +1,27 @@
+--- @module ion7.grammar
 --- SPDX-License-Identifier: MIT
---- ion7-grammar — Best-in-class GBNF grammar engine for LuaJIT.
+--- GBNF grammar engine for LuaJIT — pure Lua, zero C.
 ---
---- Pure Lua. Zero C. Works with any GGUF model via ion7-core.
---- Every public constructor returns a Grammar_obj — fully composable.
+--- Every public constructor returns a `Grammar_obj`. All `Grammar_obj`s are
+--- composable via the composition operators. Sub-modules are accessible via
+--- `Grammar.Compose`, `Grammar.Fuzzer`, etc. for advanced use.
+---
+--- @usage
+---   local Grammar = require "ion7.grammar"
+---
+---   -- From a Lua type annotation
+---   local g = Grammar.from_type({ name = "string", age = "integer" })
+---   local gbnf = g:to_gbnf()
+---
+---   -- From a JSON Schema
+---   local g2 = Grammar.from_json_schema({ type = "object",
+---       properties = { status = { enum = { "ok", "error" } } },
+---       required = { "status" },
+---   })
+---
+---   -- Compose grammars
+---   local union = g:union(g2)
+---   local wrapped = g:then_(Grammar.from_regex("\\d+"))
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

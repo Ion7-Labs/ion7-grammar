@@ -1,20 +1,28 @@
+--- @module ion7.grammar.ast.nodes
 --- SPDX-License-Identifier: MIT
 --- AST node constructors for GBNF grammars.
 ---
 --- Every function returns a plain Lua table with a `kind` field.
---- These tables are the atoms that Builder and Composer operate on.
+--- These tables are the atoms that `Builder` and `Composer` operate on.
+--- Node tables are never mutated after construction.
 ---
---- Node kinds:
----   literal  { kind, value }
----   char     { kind, spec, negated }
----   ref      { kind, name }
----   seq      { kind, items[] }
----   alt      { kind, items[] }
----   rep      { kind, node, min, max }  max=-1 means unlimited
----   group    { kind, node }
+--- Node kinds and shapes:
+---   literal  { kind="literal", value }
+---   char     { kind="char",    spec, negated }
+---   ref      { kind="ref",     name }
+---   seq      { kind="seq",     items[] }
+---   alt      { kind="alt",     items[] }
+---   rep      { kind="rep",     node, min, max }   max=-1 = unlimited
+---   group    { kind="group",   node }
+---
+--- @usage
+---   local ast = require "ion7.grammar.ast.nodes"
+---   local node = ast.seq(ast.literal("{"), ast.ref("ws"), ast.literal("}"))
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0
+
+---@alias node table  AST node table with a `kind` field.
 
 local ast = {}
 

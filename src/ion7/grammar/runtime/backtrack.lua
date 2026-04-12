@@ -1,15 +1,27 @@
+--- @module ion7.grammar.runtime.backtrack
 --- SPDX-License-Identifier: MIT
---- Grammar-guided generation with backtracking via ion7-core KV cache.
+--- Grammar-guided generation with KV-cache backtracking (IterGen / CRANE).
 ---
---- This is our killer feature. Inspired by IterGen (ICLR 2025), implemented
---- natively in Lua using ion7-core's snapshot/restore and kv_seq_rm.
+--- Inspired by IterGen (ICLR 2025). Implemented natively in Lua using
+--- ion7-core's `ctx:snapshot()` / `ctx:restore()` and `ctx:kv_seq_rm()`.
 ---
---- The idea: instead of decoding left-to-right with no recourse, we track
---- grammar symbol positions in the generated output. If a semantic constraint
---- fails (wrong table name, invalid reference, forbidden pattern), we:
----   1. Restore the KV cache to just before the bad fragment
----   2. Resample only that fragment
----   3. Continue generation
+--- When a semantic constraint fails (wrong table name, invalid reference,
+--- forbidden pattern), Backtrack:
+---   1. Restores the KV cache to just before the bad fragment
+---   2. Resamples only that fragment (up to `max_retries` times)
+---   3. Continues generation from the corrected point
+---
+--- Requires ion7-core (not available in pure-Lua mode).
+---
+--- @usage
+---   local bt = Grammar.backtrack(ctx, vocab, sampler)
+---
+---   bt:checkpoint("tbl")                -- save KV position
+---   bt:forward(function(p) return p:find("%s") end)  -- gen until space
+---   bt:constrain("tbl", function(text)  -- validate; rollback if false
+---       return db:has_table(text:match("(%w+)$"))
+---   end)
+---   local result = bt:run()
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

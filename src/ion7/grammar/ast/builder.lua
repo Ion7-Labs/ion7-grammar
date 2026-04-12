@@ -1,16 +1,21 @@
+--- @module ion7.grammar.ast.builder
 --- SPDX-License-Identifier: MIT
 --- Fluent API for building GBNF grammars programmatically.
 ---
---- GrammarBuilder maintains a set of named rules. Call builder methods
---- to define rules, then :compile() to get the GBNF string.
+--- `Builder` maintains an ordered set of named rules. Add rules with
+--- `:rule()`, then call `:compile()` to get the GBNF string ready for
+--- llama.cpp. Typically obtained via `Grammar.builder()` rather than
+--- required directly.
 ---
 --- @usage
----   local Builder = require "ion7.grammar.ast.builder"
 ---   local Grammar = require "ion7.grammar"
 ---
----   local b = Builder.new()
----       :rule("root", Grammar.seq(Grammar.literal("{"), Grammar.ref("ws"), Grammar.literal("}")))
----       :compile()
+---   local b = Grammar.builder()
+---   b:rule("digit", Grammar.char("0-9"))
+---   b:rule("root",  Grammar.plus(Grammar.ref("digit")))
+---   print(b:compile())
+---   -- root ::= [0-9]+
+---   -- digit ::= [0-9]
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

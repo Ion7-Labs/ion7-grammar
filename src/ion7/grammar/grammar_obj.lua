@@ -1,12 +1,14 @@
+--- @module ion7.grammar.grammar_obj
 --- SPDX-License-Identifier: MIT
---- Grammar_obj — the composable grammar handle returned by all constructors.
+--- Composable grammar handle returned by every public constructor.
 ---
---- Every public constructor in ion7.grammar returns a Grammar_obj.
---- Grammar_obj wraps a Builder and exposes the high-level user-facing API:
---- to_gbnf(), merge(), union(), fuzz(), inspect(), trigger_words(), etc.
+--- `Grammar_obj` wraps a `Builder` and exposes the high-level user-facing
+--- API: `to_gbnf()`, `merge()`, `union()`, `fuzz()`, `inspect()`,
+--- `trigger_words()`, etc. All methods that return a grammar return a new
+--- `Grammar_obj`, so calls chain freely.
 ---
---- Methods that compose grammars (union, then_) are thin delegates to the
---- Compose module loaded lazily to avoid circular deps at module load time.
+--- You rarely need to require this module directly — obtain instances via
+--- the `Grammar.*` constructors in `ion7.grammar`.
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

@@ -1,9 +1,11 @@
+--- @module ion7.grammar.ast
 --- SPDX-License-Identifier: MIT
---- AST layer aggregator.
+--- AST layer aggregator — re-exports `ion7.grammar.ast.nodes`.
 ---
---- Re-exports ion7.grammar.ast.nodes so that the canonical path
---- `require "ion7.grammar.ast"` continues to work after the move to
---- the ast/ subdirectory.
+--- The canonical require path `require "ion7.grammar.ast"` resolves here.
+--- All node constructors (`literal`, `char`, `seq`, `alt`, `rep`, …) and
+--- pre-built constants (`DIGIT`, `ALPHA`, `WS`, …) are available directly
+--- on the returned table.
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

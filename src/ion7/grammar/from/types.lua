@@ -1,22 +1,28 @@
+--- @module ion7.grammar.from.types
 --- SPDX-License-Identifier: MIT
 --- Lua type annotations → GBNF grammars.
 ---
---- Converts simple Lua type descriptions into grammars without having
---- to write JSON Schema or GBNF by hand. Designed for tool-calling and
---- structured output in agentic applications.
+--- Converts simple Lua type descriptions into grammars without writing
+--- JSON Schema or GBNF by hand. Designed for tool-calling and structured
+--- output in agentic applications.
 ---
 --- Type syntax:
----   "string"              Any JSON string
----   "number"              Any JSON number
----   "integer"             Any JSON integer
----   "boolean"             true | false
----   "null"                null
----   { "string" }          Array of strings
----   { "integer" }         Array of integers
----   { key = "type", ... } Object with typed fields
----   { key = { "type" } }  Object with array-typed fields
----   { key = { a="t" } }   Nested objects
----   "string?"             Optional string (null | string)
+---   `"string"`              Any JSON string
+---   `"number"`              Any JSON number
+---   `"integer"`             Any JSON integer
+---   `"boolean"`             `true | false`
+---   `"null"`                `null`
+---   `"any"`                 Unconstrained
+---   `"T?"`                  Optional — `null | T`
+---   `{ "T" }`               Array of T
+---   `{ key = "T", ... }`    Object with typed fields (all required)
+---   `{ ["key?"] = "T" }`    Optional field (key ending with `?`)
+---   `{ key = { "T" } }`     Field whose value is an array
+---
+--- @usage
+---   local Types = require "ion7.grammar.from.types"
+---   local b = Types.from_type({ name = "string", age = "integer?" })
+---   print(b:compile())
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

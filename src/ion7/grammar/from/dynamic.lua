@@ -1,10 +1,18 @@
+--- @module ion7.grammar.from.dynamic
 --- SPDX-License-Identifier: MIT
---- Input-dependent grammars — build grammars from runtime data.
+--- Runtime-data grammars — build grammars from live values.
 ---
---- Dynamic grammars solve the semantic gap of static grammars: instead of
---- only enforcing SQL *syntax*, the model becomes physically incapable of
---- generating a table name, function name, or enum value that doesn't exist
---- in your actual dataset.
+--- Dynamic grammars close the semantic gap of static grammars: instead of
+--- only enforcing syntax, the model becomes physically incapable of
+--- generating a table name, function name, or enum value that does not
+--- exist in your actual dataset.
+---
+--- @usage
+---   local Dynamic = require "ion7.grammar.from.dynamic"
+---
+---   -- Only allow values that exist in the DB right now
+---   local b = Dynamic.from_enum("table-name", db:get_table_names())
+---   local gbnf = b:compile()
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

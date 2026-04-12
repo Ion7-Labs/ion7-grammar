@@ -1,15 +1,20 @@
+--- @module ion7.grammar.ast.compiler
 --- SPDX-License-Identifier: MIT
 --- AST → GBNF string compiler.
 ---
 --- Takes a set of named rules and produces a valid GBNF string for
---- llama.cpp's grammar-constrained sampler.
+--- llama.cpp's grammar-constrained sampler. Used internally by `Builder:compile()`.
 ---
---- GBNF format:
+--- GBNF syntax reference:
 ---   root  ::= expression
----   rule  ::= "text" | [a-z] | other-rule | ( a b ) | a* | a{n,m}
+---   rule  ::= "text" | [a-z] | other-rule | ( a b ) | a* | a+ | a? | a{n,m}
 ---
---- Rule names: [a-z][a-z0-9-]* - letters, digits, hyphens ONLY.
+--- Rule name constraint: `[a-z][a-z0-9-]*` — letters, digits, hyphens only.
 --- Underscores are NOT valid in this llama.cpp build.
+---
+--- @usage
+---   local compiler = require "ion7.grammar.ast.compiler"
+---   local gbnf = compiler.compile(rules, "root", true)
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

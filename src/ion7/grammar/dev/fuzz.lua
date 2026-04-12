@@ -1,14 +1,24 @@
+--- @module ion7.grammar.dev.fuzz
 --- SPDX-License-Identifier: MIT
---- Grammar fuzzing — generate random valid strings without a model.
+--- Grammar fuzzer — generate random valid strings without a model.
 ---
---- Given a Grammar, produces random strings that are guaranteed to match
---- the grammar. Useful for:
----   - Validating grammar correctness before using it with an LLM
----   - Generating test cases and example outputs
----   - Debugging: "does my grammar actually allow what I think it allows?"
----   - Benchmarking grammar complexity
+--- Given a grammar, produces random strings that are guaranteed to match it.
+--- Pure Lua — zero model, zero GPU, instant. Use this to:
+---   - Validate grammar correctness before touching the GPU
+---   - Catch over-constrained grammars that produce only empty strings
+---   - Generate test cases and example outputs
+---   - Debug: "does my grammar actually allow what I think it allows?"
 ---
---- This is pure Lua — zero model, zero GPU. Instant.
+--- @usage
+---   local Grammar = require "ion7.grammar"
+---
+---   local g = Grammar.from_enum("color", { "red", "green", "blue" })
+---   local samples, seed = Grammar.fuzz(g, { count = 10, seed = 42 })
+---   -- samples = { "green", "red", "blue", "red", ... }
+---
+---   -- Validate before using with the model
+---   local ok, err = Grammar.fuzz_validate(g)
+---   assert(ok, err)
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

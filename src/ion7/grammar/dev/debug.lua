@@ -1,8 +1,30 @@
+--- @module ion7.grammar.dev.debug
 --- SPDX-License-Identifier: MIT
 --- Grammar debugging and introspection tools.
 ---
 --- Provides human-readable representations of grammars, rule analysis,
 --- complexity metrics, and visual diff between grammar versions.
+--- Typically accessed via `Grammar.debug()`, `Grammar.analyze()`,
+--- `Grammar.tree()`, and `Grammar.diff()`.
+---
+--- @usage
+---   local Grammar = require "ion7.grammar"
+---
+---   local g = Grammar.from_type({ name = "string", age = "integer" })
+---
+---   -- Annotated GBNF with rule stats
+---   print(Grammar.debug(g))
+---
+---   -- Structured analysis
+---   local a = Grammar.analyze(g)
+---   print(a.n_rules, a.root, #a.unreferenced)
+---
+---   -- ASCII dependency tree
+---   print(Grammar.tree(g))
+---
+---   -- Diff two grammars
+---   local g2 = Grammar.from_type({ name = "string" })
+---   print(Grammar.diff(g, g2))
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0

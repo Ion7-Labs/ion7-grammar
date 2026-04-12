@@ -1,30 +1,33 @@
+--- @module ion7.grammar.from.regex
 --- SPDX-License-Identifier: MIT
---- Regex → GBNF converter.
+--- ERE regex → GBNF converter.
 ---
---- Parses a subset of PCRE/ERE regex and produces GBNF rules.
---- The model cannot generate tokens that don't match the regex.
+--- Parses a subset of PCRE/ERE regex and produces GBNF AST nodes or a
+--- complete GBNF string. Typically accessed via `Grammar.from_regex()`.
 ---
 --- Supported syntax:
----   .          Any character except newline
----   [abc]      Character class
----   [^abc]     Negated character class
----   [a-z]      Character range
----   \d \w \s   Digit, word char, whitespace (and \D \W \S negations)
----   \n \r \t   Escape sequences
----   a*         Zero or more
----   a+         One or more
----   a?         Optional
----   a{n}       Exactly n
----   a{n,m}     Between n and m
----   a{n,}      At least n
----   (abc)      Group
----   a|b        Alternation
----   abc        Sequence (implicit)
+---   `.`        Any character except newline
+---   `[abc]`    Character class
+---   `[^abc]`   Negated character class
+---   `[a-z]`    Character range
+---   `\d \w \s` Digit, word char, whitespace (and `\D \W \S` negations)
+---   `\n \r \t` Escape sequences
+---   `a*`       Zero or more
+---   `a+`       One or more
+---   `a?`       Optional
+---   `a{n}`     Exactly n repetitions
+---   `a{n,m}`   Between n and m repetitions
+---   `a{n,}`    At least n repetitions
+---   `(abc)`    Group
+---   `a|b`      Alternation
+---   `abc`      Implicit sequence
 ---
---- NOT supported (out of scope for GBNF context):
----   ^ $ anchors (GBNF has no positional concept)
----   (?:...) (?=...) lookahead/lookbehind
----   Backreferences \1
+--- Not supported: `^` `$` anchors, lookahead/lookbehind, backreferences.
+---
+--- @usage
+---   local regex_m = require "ion7.grammar.from.regex"
+---   local gbnf = regex_m.to_gbnf("\\d{4}-\\d{2}-\\d{2}", "date")
+---   -- date ::= [0-9]{4} "-" [0-9]{2} "-" [0-9]{2}
 ---
 --- @author Ion7-Labs
 --- @version 0.1.0
