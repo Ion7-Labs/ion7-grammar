@@ -95,7 +95,7 @@ end
 function Backtrack:_save_snapshot()
     local idx  = #self._tokens
     local blob = self._ctx:snapshot()
-    self._snapshots[idx] = { blob = blob, n_past = self._ctx._n_past }
+    self._snapshots[idx] = { blob = blob, n_past = self._ctx:n_past() }
     return idx
 end
 
@@ -107,7 +107,7 @@ function Backtrack:_restore_to(snap_idx)
             "[ion7.grammar.runtime.backtrack] no snapshot at token %d", snap_idx))
     end
     self._ctx:restore(snap.blob)
-    self._ctx._n_past = snap.n_past
+    self._ctx:set_n_past(snap.n_past)
     self._sampler:reset()
 
     for i = #self._tokens, snap_idx + 1, -1 do
@@ -220,15 +220,26 @@ end
 
 --- Apply a semantic constraint at the current position (CRANE pattern).
 ---
+--- If the validator fails on the current text, rolls back to the last
+--- checkpoint for `symbol` and re-runs `forward` (using `opts.forward_pred`
+--- and `opts.max_forward`) before re-validating.  This mirrors how `run()`
+--- uses constrain: checkpoint → forward → constrain, so retries must repeat
+--- the forward pass to produce a complete new candidate.
+---
 --- @param  symbol     string    Checkpoint symbol to backtrack to on failure.
 --- @param  validator  function  fn(text) → boolean.
 --- @param  opts       table?
----   opts.max_retries  number?
----   opts.on_retry     function?
+---   opts.max_retries   number?
+---   opts.forward_pred  function?  Stop predicate for the re-forward pass
+---                                 (same one used in the original forward call).
+---   opts.max_forward   number?    Token limit for the re-forward pass.
+---   opts.on_retry      function?
 --- @return boolean
 function Backtrack:constrain(symbol, validator, opts)
     opts = opts or {}
-    local max_retries = opts.max_retries or self._max_retries
+    local max_retries  = opts.max_retries  or self._max_retries
+    local forward_pred = opts.forward_pred
+    local max_forward  = opts.max_forward
 
     if validator(self:text()) then return true end
 
@@ -242,8 +253,15 @@ function Backtrack:constrain(symbol, validator, opts)
         if opts.on_retry then pcall(opts.on_retry, attempt) end
         self:_restore_to(snap_idx)
 
-        local tok, _ = self:_gen_one()
-        if not tok then return false end
+        -- Re-run forward to build a complete new candidate before validating.
+        if forward_pred then
+            self:forward(forward_pred, max_forward)
+        else
+            -- No forward_pred: generate a single token (legacy behaviour,
+            -- works when the checkpoint is at a single-token decision point).
+            local tok = self:_gen_one()
+            if not tok then return false end
+        end
 
         if validator(self:text()) then return true end
     end
@@ -253,7 +271,12 @@ end
 
 --- Run a complete constrained generation loop with automatic backtracking.
 ---
---- @param  steps  table  Array of { symbol, until_pred, validator, max_retries }.
+--- @param  steps  table  Array of step tables:
+---   step.symbol      string     Checkpoint name.
+---   step.until_pred  function?  Stop predicate passed to forward().
+---   step.max_tokens  number?    Token limit for the forward pass.
+---   step.validator   function?  fn(text) → boolean, passed to constrain().
+---   step.max_retries number?    Override max_retries for this step.
 --- @return string   text  Full generated text.
 --- @return boolean  ok    true if all constraints satisfied.
 function Backtrack:run(steps)
@@ -266,7 +289,9 @@ function Backtrack:run(steps)
 
         if step.validator then
             local ok = self:constrain(step.symbol, step.validator, {
-                max_retries = step.max_retries,
+                max_retries  = step.max_retries,
+                forward_pred = step.until_pred,   -- re-forward on retry
+                max_forward  = step.max_tokens,
             })
             if not ok then all_ok = false end
         end
