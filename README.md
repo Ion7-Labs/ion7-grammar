@@ -30,6 +30,12 @@ local sampler = ion7.Sampler.chain()
 - **Runtime grammars** — `GrammarContext`: grows with conversation turns, snapshot/restore
 - **Backtracking** — KV cache rollback to resample any fragment (IterGen / CRANE pattern)
 - **DCCD** — Draft-Conditioned Constrained Decoding with `close_thinking` for Qwen3.5 / DeepSeek-R1
+
+> **Note (DCCD):** The core two-pass algorithm follows [arXiv:2603.03305](https://arxiv.org/abs/2603.03305).
+> The `best_of_k` selection uses output length as a proxy for feasible mass, rather than the
+> cumulative log-feasible-mass criterion (`Σ log ᾱ_t`) from the paper - the sampler does not
+> currently expose per-step feasible mass. For `k=1` (default) this has no effect.
+> `close_thinking` and the speculative n-gram draft path are ion7-specific extensions not in the paper.
 - **Tooling** — fuzzer, annotated GBNF debug, rule tree, grammar diff, complement
 
 Full API reference: **[ion7-labs.github.io/grammar/](https://ion7-labs.github.io/grammar/)**

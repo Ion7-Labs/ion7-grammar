@@ -14,7 +14,7 @@
 ---   5. Execute the SQL (stubbed) knowing it's schema-valid
 ---
 --- Requires model:
----   ION7_MODEL=/path/to/model.gguf luajit examples/06_sql_agent.lua
+---   ION7_MODEL=/path/to/model.gguf luajit examples/08_sql_agent.lua
 ---
 --- @author Ion7-Labs
 
