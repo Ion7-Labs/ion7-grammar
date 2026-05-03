@@ -1,6 +1,6 @@
 package = "ion7-grammar"
-version = "0.2-0"
-source  = { url = "git+https://github.com/Ion7-Labs/ion7-grammar.git", tag = "v0.2.0" }
+version = "0.2.0beta1-1"
+source  = { url = "git+https://github.com/Ion7-Labs/ion7-grammar.git", tag = "v0.2.0-beta1" }
 description = {
     summary  = "Grammar engine for LuaJIT — GBNF, ABNF, EBNF, JSON Schema, regex",
     detailed = [[
@@ -20,6 +20,11 @@ description = {
 dependencies = {
     "lua >= 5.1",
     "lpeg >= 1.0",
+    -- ion7-core ships the FFI bridge used by `from_json_schema_native`,
+    -- the runtime objects (Backtrack, DCCD), and the `ion7.vendor.json`
+    -- wrapper consumed by `from_auto` / `tool_pipeline`. lua-cjson is
+    -- pulled transitively.
+    "ion7-core >= 0.1.0beta2",
 }
 build = {
     type = "builtin",

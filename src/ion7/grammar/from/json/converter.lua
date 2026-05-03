@@ -5,7 +5,6 @@
 --- into an internal rule list. Used exclusively by from/json/init.lua.
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local ast     = require "ion7.grammar.ast"
 local regex_m = require "ion7.grammar.from.regex"

@@ -42,7 +42,6 @@
 ---   local wrapped = g:then_(Grammar.from_regex("\\d+"))
 ---
 --- @author Ion7-Labs
---- @version 0.2.0
 
 local ast_m    = require "ion7.grammar.ast"
 local Builder  = require "ion7.grammar.ast.builder"
@@ -70,7 +69,7 @@ local function DCCD_m()     return require "ion7.grammar.runtime.dccd"      end
 
 --- @class Grammar
 local Grammar = {
-    _VERSION  = "0.2.0",
+    _VERSION  = "0.2.0-beta1",
     -- Sub-modules (direct access when needed)
     Compose   = Compose,
     Types     = Types,

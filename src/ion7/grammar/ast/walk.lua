@@ -7,7 +7,6 @@
 --- Internal module — not part of the public `Grammar.*` API.
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local walk = {}
 

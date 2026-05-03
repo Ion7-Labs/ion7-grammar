@@ -32,7 +32,6 @@
 ---   -- date ::= [0-9]{4} "-" [0-9]{2} "-" [0-9]{2}
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local lpeg = require "lpeg"
 local ast  = require "ion7.grammar.ast"

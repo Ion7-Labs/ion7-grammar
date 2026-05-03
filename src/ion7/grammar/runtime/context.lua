@@ -25,7 +25,6 @@
 ---   gc:restore(snap)  -- back to before color
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local Builder = require "ion7.grammar.ast.builder"
 local ast     = require "ion7.grammar.ast"

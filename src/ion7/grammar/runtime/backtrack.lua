@@ -26,7 +26,6 @@
 ---   local result = bt:run()
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local table_concat  = table.concat
 local string_format = string.format

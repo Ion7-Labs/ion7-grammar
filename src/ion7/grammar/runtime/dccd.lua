@@ -33,7 +33,6 @@
 ---   print(result.draft)  -- unconstrained draft for debugging
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local table_concat = table.concat
 local ipairs       = ipairs

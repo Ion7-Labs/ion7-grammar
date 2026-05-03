@@ -25,7 +25,6 @@
 ---   print(b:compile())
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local json_m  = require "ion7.grammar.from.json"
 local Builder = require "ion7.grammar.ast.builder"
