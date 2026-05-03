@@ -3,15 +3,13 @@
 ---
 --- Run standalone:  luajit tests/spec/test_runtime.lua
 --- Or via runner:   luajit tests/test_pure.lua
-package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
+require "tests.helpers"
 
 local T       = require "tests.framework"
 local Grammar = require "ion7.grammar"
 local DCCD_m  = require "ion7.grammar.runtime.dccd"
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- GrammarContext
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("GrammarContext")
 
@@ -194,9 +192,7 @@ T.test("to_gbnf on current: compiles multiple enums", function()
     T.ok(type(gc:current():to_gbnf()) == "string")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- DCCD mock helpers (shared across DCCD suites)
--- ─────────────────────────────────────────────────────────────────────────────
 
 local function make_scripted_sampler(token_seq, eog_id)
     local idx = 0
@@ -235,20 +231,20 @@ local snap_id = 0
 local mock_ctx = {
     _n_past = 10,
     ptr     = function(self) return self end,
+    n_past       = function(self) return self._n_past end,
+    set_n_past   = function(self, n) self._n_past = n end,
     decode_single = function(self, _, _) self._n_past = self._n_past + 1 end,
-    snapshot = function(self)
+    seq_snapshot = function(self, _seq)
         snap_id = snap_id + 1
         return { id = snap_id, n_past = self._n_past }
     end,
-    restore = function(self, snap) self._n_past = snap.n_past end,
+    seq_restore = function(self, snap, _seq) self._n_past = snap.n_past end,
 }
 
 local draft_seq = { 20, 21, 22, 23, 24, 25, 26 }
 local final_seq = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- DCCD mock
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("DCCD mock")
 
@@ -349,7 +345,7 @@ T.test("generate: draft text matches scripted draft", function()
     T.eq(dc:generate().draft, "I think")
 end)
 
-T.test("generate: calls ctx:snapshot() at least once", function()
+T.test("generate: calls ctx:seq_snapshot() at least once", function()
     mock_ctx._n_past = 10
     local before = snap_id
     local dc = DCCD_m.new(mock_ctx, mock_vocab, {
@@ -385,12 +381,14 @@ T.test("generate: draft tokens injected into KV (arXiv:2603.03305 §3)", functio
     local mock_ctx_instr = {
         _n_past = 10,
         ptr = function(self) return self end,
+        n_past       = function(self) return self._n_past end,
+        set_n_past   = function(self, n) self._n_past = n end,
         decode_single = function(self, tok, _)
             self._n_past = self._n_past + 1
             kv_injected[#kv_injected + 1] = tok
         end,
-        snapshot = function(self) return { n_past = self._n_past } end,
-        restore  = function(self, snap)
+        seq_snapshot = function(self, _seq) return { n_past = self._n_past } end,
+        seq_restore  = function(self, snap, _seq)
             self._n_past = snap.n_past
             kv_injected = {}   -- reset on restore: only care about post-restore calls
         end,
@@ -503,9 +501,7 @@ T.test("Grammar.dccd: default max_draft_tokens=512", function()
     T.eq(dc._max_d, 512)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- DCCD spec_draft_fn path
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("DCCD spec_draft_fn path")
 
@@ -555,14 +551,16 @@ T.test("generate: spec_draft_fn tokens injected before constrained pass", functi
         _n_past  = 10,
         _last_tok = 7,
         ptr      = function(self) return self end,
+        n_past       = function(self) return self._n_past end,
+        set_n_past   = function(self, n) self._n_past = n end,
         decode_single = function(self, tok, _)
             self._n_past = self._n_past + 1
             kv_spec[#kv_spec + 1] = tok
         end,
-        snapshot = function(self)
+        seq_snapshot = function(self, _seq)
             return { n_past = self._n_past }
         end,
-        restore  = function(self, snap)
+        seq_restore  = function(self, snap, _seq)
             self._n_past = snap.n_past
             kv_spec = {}
         end,
@@ -608,9 +606,7 @@ T.test("generate: spec_draft_fn nil result treated as empty", function()
     T.eq(type(r), "table")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- DCCD close_thinking
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("DCCD close_thinking")
 
@@ -715,11 +711,5 @@ T.test("n_past advances by n_close_toks extra when close_thinking set", function
     T.eq(mock_ctx._n_past, pre_past + r.n_draft_toks + r.n_close_toks + r.n_tokens)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Standalone runner
--- ─────────────────────────────────────────────────────────────────────────────
-
-if arg and arg[0] and arg[0]:find("test_runtime") then
-    local ok = T.summary()
-    os.exit(ok and 0 or 1)
-end
+local ok = T.summary()
+os.exit(ok and 0 or 1)

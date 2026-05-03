@@ -3,7 +3,7 @@
 ---
 --- Run standalone:  luajit tests/spec/test_from.lua
 --- Or via runner:   luajit tests/test_pure.lua
-package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
+require "tests.helpers"
 
 local T       = require "tests.framework"
 local Grammar = require "ion7.grammar"
@@ -12,9 +12,7 @@ local json_m  = require "ion7.grammar.from.json"
 local Types   = require "ion7.grammar.from.types"
 local Dynamic = require "ion7.grammar.from.dynamic"
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Regex
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Regex")
 
@@ -122,9 +120,7 @@ T.test("regex_m.to_gbnf: returns GBNF string with named root", function()
     T.ok(gbnf:find("digits ::="))
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- JSON Schema
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("JSON Schema")
 
@@ -172,9 +168,7 @@ T.test("to_gbnf: array typed items compiles", function()
     T.ok(gbnf:find('"true"') or gbnf:find("boolean"))
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Type annotations
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Type annotations")
 
@@ -256,9 +250,7 @@ T.test("from_function: ignores name, uses params", function()
     T.ok(type(b:compile()) == "string")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Dynamic grammars
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Dynamic grammars")
 
@@ -351,11 +343,5 @@ T.test("Grammar.from_json_enum: returns Grammar_obj", function()
     T.ok(type(Grammar.from_json_enum("s", { "a", "b" }).to_gbnf) == "function")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Standalone runner
--- ─────────────────────────────────────────────────────────────────────────────
-
-if arg and arg[0] and arg[0]:find("test_from") then
-    local ok = T.summary()
-    os.exit(ok and 0 or 1)
-end
+local ok = T.summary()
+os.exit(ok and 0 or 1)

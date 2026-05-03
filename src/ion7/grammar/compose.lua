@@ -13,6 +13,9 @@
 local ast     = require "ion7.grammar.ast"
 local Builder = require "ion7.grammar.ast.builder"
 
+local table_unpack = table.unpack or unpack
+local ipairs       = ipairs
+
 local Compose = {}
 
 -- ── AST ref rewriting ─────────────────────────────────────────────────────────
@@ -137,7 +140,7 @@ function Compose.sequence(a, b, opts)
     if opts.separator then parts[#parts + 1] = opts.separator end
     parts[#parts + 1] = ast.ref(root_b)
 
-    result:rule(opts.root or "root", ast.seq(table.unpack(parts)))
+    result:rule(opts.root or "root", ast.seq(table_unpack(parts)))
     return result
 end
 

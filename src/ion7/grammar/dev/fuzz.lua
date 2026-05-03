@@ -56,6 +56,21 @@ end
 
 -- ── Character class expander ──────────────────────────────────────────────────
 
+local function decode_escape(spec, i)
+    -- Interprets the escape that starts at `spec[i] == '\\'`.
+    -- Returns (decoded_char, next_index_to_resume_at).
+    local esc = spec:sub(i+1, i+1)
+    if esc == 'n' then return '\n', i + 2 end
+    if esc == 'r' then return '\r', i + 2 end
+    if esc == 't' then return '\t', i + 2 end
+    if esc == 'x' and i + 3 <= #spec then
+        local hex = spec:sub(i+2, i+3)
+        local n = tonumber(hex, 16)
+        if n then return string.char(n), i + 4 end
+    end
+    return esc, i + 2
+end
+
 local function expand_char_class(spec, negated)
     local chars = {}
     local seen  = {}
@@ -63,26 +78,34 @@ local function expand_char_class(spec, negated)
 
     while i <= #spec do
         local c = spec:sub(i, i)
+        local from_ch, after_from
         if c == '\\' and i < #spec then
-            local esc = spec:sub(i+1, i+1)
-            local ch
-            if esc == 'n' then ch = '\n'
-            elseif esc == 'r' then ch = '\r'
-            elseif esc == 't' then ch = '\t'
-            else ch = esc end
-            i = i + 2
-            if not seen[ch] then seen[ch]=true; chars[#chars+1]=ch end
-        elseif i + 2 <= #spec and spec:sub(i+1,i+1) == '-' then
-            local from = string.byte(c)
-            local to   = string.byte(spec, i+2)
-            for code = from, to do
-                local ch = string.char(code)
-                if not seen[ch] then seen[ch]=true; chars[#chars+1]=ch end
-            end
-            i = i + 3
+            from_ch, after_from = decode_escape(spec, i)
         else
-            i = i + 1
-            if not seen[c] then seen[c]=true; chars[#chars+1]=c end
+            from_ch, after_from = c, i + 1
+        end
+
+        -- Range form: <atom> '-' <atom>
+        if after_from <= #spec and spec:sub(after_from, after_from) == '-'
+           and after_from + 1 <= #spec then
+            local rng_i = after_from + 1
+            local to_ch, after_to
+            if spec:sub(rng_i, rng_i) == '\\' and rng_i < #spec then
+                to_ch, after_to = decode_escape(spec, rng_i)
+            else
+                to_ch, after_to = spec:sub(rng_i, rng_i), rng_i + 1
+            end
+            for code = string.byte(from_ch), string.byte(to_ch) do
+                local ch = string.char(code)
+                if not seen[ch] then seen[ch] = true; chars[#chars+1] = ch end
+            end
+            i = after_to
+        else
+            if not seen[from_ch] then
+                seen[from_ch] = true
+                chars[#chars+1] = from_ch
+            end
+            i = after_from
         end
     end
 
@@ -181,10 +204,9 @@ end
 --- @return number  The seed used (for reproduction).
 function Fuzzer.fuzz(grammar, opts)
     opts = opts or {}
-    local count     = opts.count or 5
-    local seed      = opts.seed  or os.time()
-    local root_name = opts.root  or "root"
-    local rng       = make_rng(seed)
+    local count = opts.count or 5
+    local seed  = opts.seed  or os.time()
+    local rng   = make_rng(seed)
 
     local b = grammar._builder or grammar
     local rules = b._rules or {}
@@ -192,6 +214,9 @@ function Fuzzer.fuzz(grammar, opts)
     local by_name = {}
     for _, r in ipairs(rules) do by_name[r.name] = r end
 
+    -- Resolution order : explicit opts.root, then the builder's declared
+    -- root, then "root", then the first rule in the rule list.
+    local root_name = opts.root or b._root or "root"
     local root_rule = by_name[root_name]
     if not root_rule then
         root_rule = rules[1]

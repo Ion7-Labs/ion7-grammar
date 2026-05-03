@@ -10,9 +10,21 @@
 local ast     = require "ion7.grammar.ast"
 local regex_m = require "ion7.grammar.from.regex"
 
+local table_unpack  = table.unpack or unpack
+local string_format = string.format
+local ipairs        = ipairs
+local pairs         = pairs
+local tostring      = tostring
+local type          = type
+
+--- Sentinel for JSON null. Same identity is re-exported by
+--- `ion7.grammar.from.json` and `ion7.grammar`.
+local null = setmetatable({}, { __tostring = function() return "null" end })
+
 --- @class Converter
 local Converter = {}
 Converter.__index = Converter
+Converter.null = null
 
 function Converter.new(schema)
     return setmetatable({
@@ -74,7 +86,7 @@ function Converter:convert(schema, hint)
             alts[#alts+1] = self:encode_value(v)
         end
         local name = self:fresh(hint or "enum")
-        return self:add_rule(name, ast.alt(table.unpack(alts)))
+        return self:add_rule(name, ast.alt(table_unpack(alts)))
     end
 
     local combo = schema["oneOf"] or schema["anyOf"]
@@ -84,7 +96,7 @@ function Converter:convert(schema, hint)
             alts[#alts+1] = ast.ref(self:convert(s))
         end
         local name = self:fresh(hint or "oneof")
-        return self:add_rule(name, ast.alt(table.unpack(alts)))
+        return self:add_rule(name, ast.alt(table_unpack(alts)))
     end
 
     if schema["allOf"] then
@@ -103,7 +115,7 @@ function Converter:convert(schema, hint)
             alts[#alts+1] = ast.ref(self:convert({ type = ty }, hint))
         end
         local name = self:fresh(hint or "multi")
-        return self:add_rule(name, ast.alt(table.unpack(alts)))
+        return self:add_rule(name, ast.alt(table_unpack(alts)))
     end
 
     if t == "string"  then return self:convert_string(schema, hint) end
@@ -118,8 +130,7 @@ function Converter:convert(schema, hint)
 end
 
 function Converter:encode_value(v)
-    local null_sentinel = require("ion7.grammar.from.json").null
-    if v == nil or v == null_sentinel then
+    if v == nil or v == null then
         return ast.literal("null")
     elseif type(v) == "boolean" then
         return ast.literal(v and "true" or "false")
@@ -361,7 +372,7 @@ function Converter:convert_object(schema, hint)
     local members_body
     if #parts == 0 then     members_body = ast.literal("")
     elseif #parts == 1 then members_body = parts[1]
-    else                    members_body = ast.seq(table.unpack(parts)) end
+    else                    members_body = ast.seq(table_unpack(parts)) end
 
     local body = ast.alt(
         ast.seq(ast.literal("{"), ast.ref("ws"), ast.literal("}")),

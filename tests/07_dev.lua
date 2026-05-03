@@ -3,16 +3,14 @@
 ---
 --- Run standalone:  luajit tests/spec/test_dev.lua
 --- Or via runner:   luajit tests/test_pure.lua
-package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
+require "tests.helpers"
 
 local T       = require "tests.framework"
 local Grammar = require "ion7.grammar"
 local Debug_m = require "ion7.grammar.dev.debug"
 local Except  = require "ion7.grammar.except"
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Fuzzer
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Fuzzer")
 
@@ -122,9 +120,7 @@ T.test("Grammar_obj:fuzz() returns samples", function()
     T.eq(#s, 5)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Debug module
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Debug module")
 
@@ -219,9 +215,7 @@ T.test("diff: no changes shows '(no changes)'", function()
     T.ok(Grammar.diff(g, g):find("no changes"))
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Except module
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Except module")
 
@@ -328,11 +322,5 @@ T.test("except_prefix: no prefixes returns base grammar", function()
     T.ok(type(Except.except_prefix(base_g, {}, "result")) == "table")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Standalone runner
--- ─────────────────────────────────────────────────────────────────────────────
-
-if arg and arg[0] and arg[0]:find("test_dev") then
-    local ok = T.summary()
-    os.exit(ok and 0 or 1)
-end
+local ok = T.summary()
+os.exit(ok and 0 or 1)

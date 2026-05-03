@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 500" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <style>
+    .panel    { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 1.4; rx: 8; ry: 8; }
+    .step     { fill: #eef2ff; stroke: #4f46e5; stroke-width: 1.4; rx: 6; ry: 6; }
+    .save     { fill: #fef3c7; stroke: #d97706; stroke-width: 1.4; rx: 6; ry: 6; }
+    .ok       { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.4; rx: 6; ry: 6; }
+    .fail     { fill: #fee2e2; stroke: #dc2626; stroke-width: 1.4; rx: 6; ry: 6; }
+    .label    { fill: #1f2937; font-weight: 600; }
+    .name     { fill: #1f2937; }
+    .sub      { fill: #4b5563; font-size: 11px; }
+    .arrow    { stroke: #6b7280; stroke-width: 1.5; fill: none; marker-end: url(#tip); }
+    .arrow-back { stroke: #dc2626; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; marker-end: url(#tip-r); }
+    @media (prefers-color-scheme: dark) {
+      .panel   { fill: #2e1065; stroke: #a78bfa; }
+      .step    { fill: #1e1b4b; stroke: #818cf8; }
+      .save    { fill: #422006; stroke: #fbbf24; }
+      .ok      { fill: #14532d; stroke: #4ade80; }
+      .fail    { fill: #450a0a; stroke: #f87171; }
+      .label   { fill: #e5e7eb; }
+      .name    { fill: #e5e7eb; }
+      .sub     { fill: #9ca3af; }
+      .arrow   { stroke: #9ca3af; }
+    }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <marker id="tip-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+
+  <!-- Backtrack panel -->
+  <rect class="panel" x="20" y="20" width="340" height="450"/>
+  <text class="label" x="190" y="46" text-anchor="middle">Backtrack  ·  per-seq KV rollback</text>
+  <text class="sub"   x="190" y="64" text-anchor="middle">opts.seq_id  ·  opts.pos  ·  IterGen / CRANE</text>
+
+  <rect class="step" x="50" y="92" width="280" height="44"/>
+  <text class="name" x="190" y="115" text-anchor="middle">checkpoint("symbol")</text>
+  <text class="sub"  x="190" y="130" text-anchor="middle">ctx:seq_snapshot(seq_id) + self._pos</text>
+
+  <rect class="step" x="50" y="162" width="280" height="44"/>
+  <text class="name" x="190" y="185" text-anchor="middle">forward(predicate, max)</text>
+  <text class="sub"  x="190" y="200" text-anchor="middle">decode_single(tok, seq_id) per token</text>
+
+  <rect class="step" x="50" y="232" width="280" height="44"/>
+  <text class="name" x="190" y="255" text-anchor="middle">constrain("symbol", validator)</text>
+  <text class="sub"  x="190" y="270" text-anchor="middle">if !validator(text): rollback</text>
+
+  <rect class="save" x="50" y="302" width="280" height="44"/>
+  <text class="name" x="190" y="325" text-anchor="middle">_restore_to(snap_idx)</text>
+  <text class="sub"  x="190" y="340" text-anchor="middle">ctx:seq_restore(blob, seq_id) ; sampler:reset</text>
+
+  <rect class="ok"   x="50" y="372" width="280" height="44"/>
+  <text class="name" x="190" y="395" text-anchor="middle">retry forward + validate</text>
+  <text class="sub"  x="190" y="410" text-anchor="middle">up to opts.max_retries</text>
+
+  <text class="sub"  x="190" y="448" text-anchor="middle">other seqs (0, 1, 2 …) unaffected</text>
+
+  <!-- Backtrack arrows -->
+  <path class="arrow" d="M 190 136 L 190 160"/>
+  <path class="arrow" d="M 190 206 L 190 230"/>
+  <path class="arrow-back" d="M 50 254 Q 30 320 50 320"/>
+  <path class="arrow" d="M 190 346 L 190 370"/>
+  <path class="arrow" d="M 330 392 Q 350 250 330 230"/>
+
+  <!-- DCCD panel -->
+  <rect class="panel" x="400" y="20" width="340" height="450"/>
+  <text class="label" x="570" y="46" text-anchor="middle">DCCD  ·  Draft-Conditioned Constrained Decoding</text>
+  <text class="sub"   x="570" y="64" text-anchor="middle">opts.seq_id  ·  arXiv:2603.03305</text>
+
+  <rect class="save" x="430" y="92" width="280" height="44"/>
+  <text class="name" x="570" y="115" text-anchor="middle">pre = ctx:seq_snapshot(seq_id)</text>
+  <text class="sub"  x="570" y="130" text-anchor="middle">save the post-prompt state</text>
+
+  <rect class="step" x="430" y="162" width="280" height="60"/>
+  <text class="name" x="570" y="185" text-anchor="middle">Step 1 : draft pass</text>
+  <text class="sub"  x="570" y="202" text-anchor="middle">unconstrained sampler — or spec_draft_fn</text>
+  <text class="sub"  x="570" y="216" text-anchor="middle">repeat K times for best_of_k</text>
+
+  <rect class="save" x="430" y="240" width="280" height="44"/>
+  <text class="name" x="570" y="263" text-anchor="middle">ctx:seq_restore(pre, seq_id)</text>
+  <text class="sub"  x="570" y="278" text-anchor="middle">rewind to post-prompt</text>
+
+  <rect class="step" x="430" y="302" width="280" height="60"/>
+  <text class="name" x="570" y="325" text-anchor="middle">inject draft tokens</text>
+  <text class="sub"  x="570" y="342" text-anchor="middle">decode_single(tok, seq_id) for each</text>
+  <text class="sub"  x="570" y="356" text-anchor="middle">+ optional close_thinking sequence</text>
+
+  <rect class="ok"   x="430" y="378" width="280" height="60"/>
+  <text class="name" x="570" y="402" text-anchor="middle">Step 2 : constrained pass</text>
+  <text class="sub"  x="570" y="420" text-anchor="middle">grammar sampler runs final tokens</text>
+  <text class="sub"  x="570" y="434" text-anchor="middle">attends to (prompt + draft + z&lt;t)</text>
+
+  <text class="sub"  x="570" y="460" text-anchor="middle">return longest constrained output across K drafts</text>
+
+  <!-- DCCD arrows -->
+  <path class="arrow" d="M 570 136 L 570 160"/>
+  <path class="arrow" d="M 570 222 L 570 238"/>
+  <path class="arrow" d="M 570 284 L 570 300"/>
+  <path class="arrow" d="M 570 362 L 570 376"/>
+</svg>
