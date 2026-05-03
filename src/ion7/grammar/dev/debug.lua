@@ -27,7 +27,6 @@
 ---   print(Grammar.diff(g, g2))
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local debug_m = {}
 

@@ -12,7 +12,6 @@
 ---   $ref (local only, e.g. "#/$defs/Foo"), $defs / definitions
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local Converter = require "ion7.grammar.from.json.converter"
 local ast       = require "ion7.grammar.ast"

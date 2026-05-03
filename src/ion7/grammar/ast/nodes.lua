@@ -20,7 +20,6 @@
 ---   local node = ast.seq(ast.literal("{"), ast.ref("ws"), ast.literal("}"))
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 ---@alias node table  AST node table with a `kind` field.
 

@@ -21,7 +21,6 @@
 ---   assert(ok, err)
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local Fuzzer = {}
 

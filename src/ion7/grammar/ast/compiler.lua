@@ -17,7 +17,6 @@
 ---   local gbnf = compiler.compile(rules, "root", true)
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local table_concat = table.concat
 local table_insert = table.insert

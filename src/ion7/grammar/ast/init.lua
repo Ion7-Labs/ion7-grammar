@@ -8,6 +8,5 @@
 --- on the returned table.
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 return require "ion7.grammar.ast.nodes"

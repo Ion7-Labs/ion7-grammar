@@ -15,7 +15,6 @@
 ---   local gbnf = b:compile()
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 local ast     = require "ion7.grammar.ast"
 local Builder = require "ion7.grammar.ast.builder"

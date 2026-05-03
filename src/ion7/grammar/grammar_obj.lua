@@ -11,7 +11,6 @@
 --- the `Grammar.*` constructors in `ion7.grammar`.
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
 
 -- ── First-set computation (used by trigger_words) ────────────────────────────
 -- Walks a grammar AST and collects all string prefixes that can start a match.
