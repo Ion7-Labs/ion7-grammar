@@ -2,21 +2,23 @@
 --- SPDX-License-Identifier: MIT
 --- Grammar-guided generation with KV-cache backtracking (IterGen / CRANE).
 ---
---- Inspired by IterGen (ICLR 2025). Implemented natively in Lua using
---- ion7-core's `ctx:snapshot()` / `ctx:restore()` and `ctx:kv_seq_rm()`.
----
 --- When a semantic constraint fails (wrong table name, invalid reference,
 --- forbidden pattern), Backtrack:
----   1. Restores the KV cache to just before the bad fragment
+---   1. Restores the KV cache of a single seq to just before the bad fragment
 ---   2. Resamples only that fragment (up to `max_retries` times)
 ---   3. Continues generation from the corrected point
 ---
---- Requires ion7-core (not available in pure-Lua mode).
+--- Operates on a single seq isolated from the rest of the context — multi-tenant
+--- safe. The seq id and the start position are passed explicitly so that
+--- backtracking on seq 3 cannot disturb seq 0 or seq 1's KV rows.
 ---
 --- @usage
----   local bt = Grammar.backtrack(ctx, vocab, sampler)
+---   local bt = Grammar.backtrack(ctx, vocab, sampler, {
+---       seq_id = session.seq_id,
+---       pos    = session.n_past,
+---   })
 ---
----   bt:checkpoint("tbl")                -- save KV position
+---   bt:checkpoint("tbl")                -- save seq KV at this pos
 ---   bt:forward(function(p) return p:find("%s") end)  -- gen until space
 ---   bt:constrain("tbl", function(text)  -- validate; rollback if false
 ---       return db:has_table(text:match("(%w+)$"))
@@ -26,18 +28,24 @@
 --- @author Ion7-Labs
 --- @version 0.1.0
 
+local table_concat  = table.concat
+local string_format = string.format
+local pcall         = pcall
+
 --- @class Backtrack
 local Backtrack = {}
 Backtrack.__index = Backtrack
 
 --- Create a Backtrack session.
 ---
---- @param  ctx      any     ion7-core Context (snapshot support required).
+--- @param  ctx      any     ion7-core Context.
 --- @param  vocab    any     ion7-core Vocab.
 --- @param  sampler  any     ion7-core Sampler (grammar-constrained).
 --- @param  opts     table?
----   opts.max_tokens    number?    Hard limit per generation (default: 2048).
----   opts.max_retries   number?    Max retries per backward() call (default: 10).
+---   opts.seq_id        integer?   KV seq to drive (default: 0).
+---   opts.pos           integer?   Start position in that seq (default: ctx:n_past()).
+---   opts.max_tokens    integer?   Hard limit per generation (default: 2048).
+---   opts.max_retries   integer?   Max retries per backward() call (default: 10).
 ---   opts.on_token      function?  Called with each accepted piece.
 function Backtrack.new(ctx, vocab, sampler, opts)
     assert(ctx,     "[ion7.grammar.runtime.backtrack] ctx required")
@@ -49,6 +57,8 @@ function Backtrack.new(ctx, vocab, sampler, opts)
         _ctx         = ctx,
         _vocab       = vocab,
         _sampler     = sampler,
+        _seq_id      = opts.seq_id or 0,
+        _pos         = opts.pos    or ctx:n_past(),
         _max_tokens  = opts.max_tokens  or 2048,
         _max_retries = opts.max_retries or 10,
         _on_token    = opts.on_token,
@@ -71,20 +81,25 @@ function Backtrack:_gen_one(batch_idx)
     local sampler = self._sampler
 
     local tok = sampler:sample(ctx:ptr(), batch_idx or -1)
-    -- Note: llama_sampler_sample() already calls llama_sampler_accept() internally.
-    -- Do NOT call sampler:accept(tok) - double-accept corrupts grammar state.
+    -- llama_sampler_sample() calls llama_sampler_accept() internally.
+    -- Do NOT call sampler:accept(tok) — double-accept corrupts grammar state.
     if vocab:is_eog(tok) then
         self._done = true
         self._stop_reason = "stop"
         return nil
     end
 
-    ctx:decode_single(tok, 0)
+    ctx:set_n_past(self._pos)
+    ctx:decode_single(tok, self._seq_id)
+    self._pos = self._pos + 1
 
     local piece = vocab:piece(tok)
-    self._tokens[#self._tokens + 1]  = tok
-    self._pieces[#self._pieces + 1]  = piece
-    self._n_generated = self._n_generated + 1
+    local tokens = self._tokens
+    local pieces = self._pieces
+    local i = #tokens + 1
+    tokens[i] = tok
+    pieces[i] = piece
+    self._n_generated = i
 
     if self._on_token then pcall(self._on_token, piece) end
 
@@ -93,9 +108,11 @@ end
 
 --- @private
 function Backtrack:_save_snapshot()
-    local idx  = #self._tokens
-    local blob = self._ctx:snapshot()
-    self._snapshots[idx] = { blob = blob, n_past = self._ctx:n_past() }
+    local idx = #self._tokens
+    self._snapshots[idx] = {
+        blob = self._ctx:seq_snapshot(self._seq_id),
+        pos  = self._pos,
+    }
     return idx
 end
 
@@ -103,11 +120,11 @@ end
 function Backtrack:_restore_to(snap_idx)
     local snap = self._snapshots[snap_idx]
     if not snap then
-        error(string.format(
+        error(string_format(
             "[ion7.grammar.runtime.backtrack] no snapshot at token %d", snap_idx))
     end
-    self._ctx:restore(snap.blob)
-    self._ctx:set_n_past(snap.n_past)
+    self._ctx:seq_restore(snap.blob, self._seq_id)
+    self._pos = snap.pos
     self._sampler:reset()
 
     for i = #self._tokens, snap_idx + 1, -1 do
@@ -151,12 +168,12 @@ function Backtrack:forward(predicate, max)
         if not tok then break end
 
         if predicate then
-            local all = table.concat(self._pieces)
+            local all = table_concat(self._pieces)
             if predicate(piece, all) then break end
         end
     end
 
-    return table.concat(self._pieces)
+    return table_concat(self._pieces)
 end
 
 --- Backtrack to the last checkpoint for a symbol and resample.
@@ -181,7 +198,7 @@ function Backtrack:backward(symbol, validator)
         end
 
         if validator then
-            local accepted = validator(piece, table.concat(self._pieces))
+            local accepted = validator(piece, table_concat(self._pieces))
             if accepted then return true end
         else
             return true
@@ -194,7 +211,7 @@ end
 --- Return the full generated text so far.
 --- @return string
 function Backtrack:text()
-    return table.concat(self._pieces)
+    return table_concat(self._pieces)
 end
 
 --- Return whether generation is complete.

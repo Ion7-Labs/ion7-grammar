@@ -56,7 +56,7 @@ ion7.init({ log_level = 0, llama_path = lib_dir, bridge_path = lib_dir,
 -- ── Model / Vocab / Context ───────────────────────────────────────────────────
 
 -- Context must fit: prompt + max_draft_tokens + max_final_tokens
-local N_CTX = 512
+local N_CTX = 2048
 
 -- Thinking models (Qwen3.5, DeepSeek-R1) open a <think> block in the
 -- generation prefix that is never closed by the draft pass.  The constrained

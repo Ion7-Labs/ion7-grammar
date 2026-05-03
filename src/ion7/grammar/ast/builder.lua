@@ -47,16 +47,14 @@ end
 --- @param  body  table   AST node.
 --- @return Builder  self (fluent)
 function Builder:rule(name, body)
-    if self._names[name] then
-        for i, r in ipairs(self._rules) do
-            if r.name == name then
-                self._rules[i] = { name = name, body = body }
-                return self
-            end
-        end
+    local idx = self._names[name]
+    if idx then
+        self._rules[idx] = { name = name, body = body }
+        return self
     end
-    self._rules[#self._rules + 1] = { name = name, body = body }
-    self._names[name] = true
+    local n = #self._rules + 1
+    self._rules[n] = { name = name, body = body }
+    self._names[name] = n
     return self
 end
 

@@ -20,6 +20,10 @@
 local ast     = require "ion7.grammar.ast"
 local Builder = require "ion7.grammar.ast.builder"
 
+local table_unpack = table.unpack or unpack
+local table_sort   = table.sort
+local ipairs       = ipairs
+
 local Dynamic = {}
 
 --- Build a grammar that matches exactly one value from a list.
@@ -37,7 +41,7 @@ function Dynamic.from_enum(rule_name, values)
 
     local sorted = {}
     for _, v in ipairs(values) do sorted[#sorted+1] = v end
-    table.sort(sorted, function(a, b) return #a > #b end)
+    table_sort(sorted, function(a, b) return #a > #b end)
 
     local seen = {}
     local unique = {}
@@ -48,7 +52,7 @@ function Dynamic.from_enum(rule_name, values)
     local alts = {}
     for _, v in ipairs(unique) do alts[#alts+1] = ast.literal(v) end
 
-    local body = #alts == 1 and alts[1] or ast.alt(table.unpack(alts))
+    local body = #alts == 1 and alts[1] or ast.alt(table_unpack(alts))
     return Builder.new({ root = rule_name }):rule(rule_name, body)
 end
 
@@ -84,8 +88,8 @@ function Dynamic.from_json_enum(rule_name, values)
             alts[#alts+1] = ast.literal('"' .. escaped .. '"')
         end
     end
-    table.sort(alts, function(a, b) return #a.value > #b.value end)
-    local body = #alts == 1 and alts[1] or ast.alt(table.unpack(alts))
+    table_sort(alts, function(a, b) return #a.value > #b.value end)
+    local body = #alts == 1 and alts[1] or ast.alt(table_unpack(alts))
     return Builder.new({ root = rule_name }):rule(rule_name, body)
 end
 
@@ -152,7 +156,7 @@ function Dynamic.from_tools(tools)
     end
 
     local root_body = #tool_alts == 1 and tool_alts[1]
-                      or ast.alt(table.unpack(tool_alts))
+                      or ast.alt(table_unpack(tool_alts))
     b:rule("tool-call", root_body)
     b:rule("root", ast.ref("tool-call"))
     b:root("root")

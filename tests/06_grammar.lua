@@ -4,14 +4,12 @@
 ---
 --- Run standalone:  luajit tests/spec/test_grammar.lua
 --- Or via runner:   luajit tests/test_pure.lua
-package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
+require "tests.helpers"
 
 local T       = require "tests.framework"
 local Grammar = require "ion7.grammar"
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Grammar constructors
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Grammar constructors")
 
@@ -249,9 +247,7 @@ T.test("raw: inspect() returns the GBNF string", function()
     T.eq(Grammar.raw(src):inspect(), src)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Grammar_obj methods
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Grammar_obj methods")
 
@@ -320,9 +316,7 @@ T.test("inspect: returns non-empty string", function()
     T.ok(#s > 0)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Composition
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Composition")
 
@@ -390,9 +384,7 @@ T.test("compose: prefix rewriting prevents broken refs", function()
     T.no_error(function() Grammar.union(g1, g2):to_gbnf() end)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Grammar_obj:trigger_words()
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Grammar_obj:trigger_words()")
 
@@ -501,9 +493,7 @@ T.test("trigger_words: raw grammar returns empty (no builder)", function()
     T.eq(#g:trigger_words(), 0)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Grammar.from_json_schema_native()
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Grammar.from_json_schema_native()")
 
@@ -525,9 +515,7 @@ T.test("from_json_schema_native: errors on boolean input", function()
     end, "schema must be a string or table")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Grammar.tool_pipeline()
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Grammar.tool_pipeline()")
 
@@ -566,11 +554,5 @@ T.test("tool_pipeline: errors on empty tools", function()
     T.err(function() Grammar.tool_pipeline({}) end, "non%-empty")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Standalone runner
--- ─────────────────────────────────────────────────────────────────────────────
-
-if arg and arg[0] and arg[0]:find("test_grammar") then
-    local ok = T.summary()
-    os.exit(ok and 0 or 1)
-end
+local ok = T.summary()
+os.exit(ok and 0 or 1)

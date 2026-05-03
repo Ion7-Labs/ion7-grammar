@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 460" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <style>
+    .src      { fill: #eef2ff; stroke: #4f46e5; stroke-width: 1.4; rx: 6; ry: 6; }
+    .pure     { fill: #ecfeff; stroke: #0891b2; stroke-width: 1.4; rx: 6; ry: 6; }
+    .ext      { fill: #fef3c7; stroke: #d97706; stroke-width: 1.4; rx: 6; ry: 6; }
+    .ast      { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 1.6; rx: 8; ry: 8; }
+    .out      { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.6; rx: 8; ry: 8; }
+    .label    { fill: #1f2937; font-weight: 600; }
+    .name     { fill: #1f2937; }
+    .sub      { fill: #4b5563; font-size: 11px; }
+    .arrow    { stroke: #6b7280; stroke-width: 1.5; fill: none; marker-end: url(#tip); }
+    @media (prefers-color-scheme: dark) {
+      .src     { fill: #1e1b4b; stroke: #818cf8; }
+      .pure    { fill: #083344; stroke: #22d3ee; }
+      .ext     { fill: #422006; stroke: #fbbf24; }
+      .ast     { fill: #2e1065; stroke: #a78bfa; }
+      .out     { fill: #14532d; stroke: #4ade80; }
+      .label   { fill: #e5e7eb; }
+      .name    { fill: #e5e7eb; }
+      .sub     { fill: #9ca3af; }
+      .arrow   { stroke: #9ca3af; }
+    }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Sources column -->
+  <text class="label" x="100" y="30" text-anchor="middle">grammar sources</text>
+
+  <rect class="src" x="20" y="50"  width="170" height="38"/>
+  <text class="name" x="105" y="73" text-anchor="middle">Lua type DSL</text>
+  <rect class="src" x="20" y="100" width="170" height="38"/>
+  <text class="name" x="105" y="123" text-anchor="middle">JSON Schema (table)</text>
+  <rect class="ext" x="20" y="150" width="170" height="38"/>
+  <text class="name" x="105" y="173" text-anchor="middle">JSON Schema (native)</text>
+  <rect class="src" x="20" y="200" width="170" height="38"/>
+  <text class="name" x="105" y="223" text-anchor="middle">regex (ERE / PCRE)</text>
+  <rect class="src" x="20" y="250" width="170" height="38"/>
+  <text class="name" x="105" y="273" text-anchor="middle">ABNF (RFC 5234)</text>
+  <rect class="src" x="20" y="300" width="170" height="38"/>
+  <text class="name" x="105" y="323" text-anchor="middle">EBNF (W3C-style)</text>
+  <rect class="src" x="20" y="350" width="170" height="38"/>
+  <text class="name" x="105" y="373" text-anchor="middle">enum / tools</text>
+  <rect class="src" x="20" y="400" width="170" height="38"/>
+  <text class="name" x="105" y="423" text-anchor="middle">from_auto (heuristic)</text>
+
+  <!-- Parsers column -->
+  <text class="label" x="380" y="30" text-anchor="middle">converters</text>
+
+  <rect class="pure" x="280" y="50"  width="200" height="38"/>
+  <text class="name" x="380" y="73" text-anchor="middle">types.to_schema → json.to_rules</text>
+  <rect class="pure" x="280" y="100" width="200" height="38"/>
+  <text class="name" x="380" y="123" text-anchor="middle">json/converter (pure-Lua)</text>
+  <rect class="ext"  x="280" y="150" width="200" height="38"/>
+  <text class="name" x="380" y="173" text-anchor="middle">ion7-core bridge → raw GBNF</text>
+  <rect class="pure" x="280" y="200" width="200" height="38"/>
+  <text class="name" x="380" y="223" text-anchor="middle">regex.lua  (LPeg)</text>
+  <rect class="pure" x="280" y="250" width="200" height="38"/>
+  <text class="name" x="380" y="273" text-anchor="middle">abnf.lua  (LPeg + core rules)</text>
+  <rect class="pure" x="280" y="300" width="200" height="38"/>
+  <text class="name" x="380" y="323" text-anchor="middle">ebnf.lua  (LPeg)</text>
+  <rect class="pure" x="280" y="350" width="200" height="38"/>
+  <text class="name" x="380" y="373" text-anchor="middle">dynamic.from_enum / from_tools</text>
+  <rect class="pure" x="280" y="400" width="200" height="38"/>
+  <text class="name" x="380" y="423" text-anchor="middle">routes to one of the above</text>
+
+  <!-- AST -->
+  <rect class="ast" x="540" y="120" width="180" height="100"/>
+  <text class="label" x="630" y="150" text-anchor="middle">ion7 AST</text>
+  <text class="sub"   x="630" y="170" text-anchor="middle">literal · char · ref · seq</text>
+  <text class="sub"   x="630" y="186" text-anchor="middle">alt · rep · group</text>
+  <text class="sub"   x="630" y="206" text-anchor="middle">Builder (O(1) name index)</text>
+
+  <!-- Compiler + GBNF output -->
+  <rect class="out" x="540" y="260" width="180" height="64"/>
+  <text class="label" x="630" y="288" text-anchor="middle">ast.compiler</text>
+  <text class="sub"   x="630" y="308" text-anchor="middle">AST → GBNF text</text>
+
+  <rect class="out" x="540" y="350" width="180" height="64"/>
+  <text class="label" x="630" y="378" text-anchor="middle">ion7-core sampler</text>
+  <text class="sub"   x="630" y="398" text-anchor="middle">grammar(gbnf, root, vocab)</text>
+
+  <!-- Arrows (sources → converters) -->
+  <path class="arrow" d="M 190 69  L 278 69"/>
+  <path class="arrow" d="M 190 119 L 278 119"/>
+  <path class="arrow" d="M 190 169 L 278 169"/>
+  <path class="arrow" d="M 190 219 L 278 219"/>
+  <path class="arrow" d="M 190 269 L 278 269"/>
+  <path class="arrow" d="M 190 319 L 278 319"/>
+  <path class="arrow" d="M 190 369 L 278 369"/>
+  <path class="arrow" d="M 190 419 L 278 419"/>
+
+  <!-- Arrows (converters → AST) -->
+  <path class="arrow" d="M 480 119 L 540 150"/>
+  <path class="arrow" d="M 480 219 L 540 180"/>
+  <path class="arrow" d="M 480 269 L 540 200"/>
+  <path class="arrow" d="M 480 319 L 540 200"/>
+  <path class="arrow" d="M 480 369 L 540 200"/>
+
+  <!-- Native bridge bypasses AST → directly to raw output -->
+  <path class="arrow" d="M 480 169 L 540 290"/>
+
+  <!-- AST → compiler → sampler -->
+  <path class="arrow" d="M 630 220 L 630 258"/>
+  <path class="arrow" d="M 630 324 L 630 348"/>
+</svg>

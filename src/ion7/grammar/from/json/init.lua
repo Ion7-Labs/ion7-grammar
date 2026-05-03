@@ -20,7 +20,7 @@ local ast       = require "ion7.grammar.ast"
 local json_mod = {}
 
 --- Sentinel for JSON null in Lua (Lua has no null value).
-json_mod.null = setmetatable({}, { __tostring = function() return "null" end })
+json_mod.null = Converter.null
 
 --- Convert a JSON Schema to GBNF rules (as an array for Builder:merge).
 ---

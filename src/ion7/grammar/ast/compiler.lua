@@ -19,6 +19,13 @@
 --- @author Ion7-Labs
 --- @version 0.1.0
 
+local table_concat = table.concat
+local table_insert = table.insert
+local table_unpack = table.unpack or unpack
+local string_format = string.format
+local tostring     = tostring
+local ipairs       = ipairs
+
 local compiler = {}
 
 -- ── Escape helpers ─────────────────────────────────────────────────────────────
@@ -69,7 +76,7 @@ local function compile_seq(node, prec)
     for _, item in ipairs(node.items) do
         parts[#parts + 1] = compile_node(item, "seq")
     end
-    local result = table.concat(parts, " ")
+    local result = table_concat(parts, " ")
     if prec == "alt" or prec == "rep" then
         return "( " .. result .. " )"
     end
@@ -83,7 +90,7 @@ local function compile_alt(node, prec)
     for _, item in ipairs(node.items) do
         parts[#parts + 1] = compile_node(item, "alt")
     end
-    local result = table.concat(parts, " | ")
+    local result = table_concat(parts, " | ")
     if prec == "seq" or prec == "rep" then
         return "( " .. result .. " )"
     end
@@ -168,8 +175,8 @@ function compiler.compile(rules, root, whitespace)
             if ws_referenced then break end
         end
         if ws_referenced then
-            rules = { table.unpack(rules) }
-            table.insert(rules, {
+            rules = { table_unpack(rules) }
+            table_insert(rules, {
                 name = "ws",
                 body = { kind = "rep",
                          node = { kind = "char", spec = " \\t\\n" },
@@ -184,7 +191,7 @@ function compiler.compile(rules, root, whitespace)
     for _, r in ipairs(rules) do
         local line = r.name .. " ::= " .. compile_node(r.body)
         if r.name == root then
-            table.insert(lines, 1, line)
+            table_insert(lines, 1, line)
             has_root = true
         else
             lines[#lines + 1] = line
@@ -195,7 +202,7 @@ function compiler.compile(rules, root, whitespace)
         error("[ion7.grammar.ast.compiler] root rule '" .. root .. "' not found")
     end
 
-    return table.concat(lines, "\n")
+    return table_concat(lines, "\n")
 end
 
 return compiler

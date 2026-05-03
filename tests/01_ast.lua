@@ -3,16 +3,14 @@
 ---
 --- Run standalone:  luajit tests/spec/test_ast.lua
 --- Or via runner:   luajit tests/test_pure.lua
-package.path = "./src/?.lua;./src/?/init.lua;" .. package.path
+require "tests.helpers"
 
 local T          = require "tests.framework"
 local Grammar    = require "ion7.grammar"
 local ast_m      = require "ion7.grammar.ast"
 local compiler_m = require "ion7.grammar.ast.compiler"
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- AST primitives
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("AST primitives")
 
@@ -145,9 +143,7 @@ T.test("ast.rule: invalid name raises error", function()
     T.err(function() ast_m.rule("123bad", Grammar.literal("x")) end)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Builder
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Builder")
 
@@ -240,9 +236,7 @@ T.test("compile: error when root rule missing", function()
     T.err(function() b:compile() end, "root rule 'missing' not found")
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- Compiler
--- ─────────────────────────────────────────────────────────────────────────────
 
 T.suite("Compiler")
 
@@ -358,11 +352,5 @@ T.test("nil node raises error", function()
     end)
 end)
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Standalone runner
--- ─────────────────────────────────────────────────────────────────────────────
-
-if arg and arg[0] and arg[0]:find("test_ast") then
-    local ok = T.summary()
-    os.exit(ok and 0 or 1)
-end
+local ok = T.summary()
+os.exit(ok and 0 or 1)

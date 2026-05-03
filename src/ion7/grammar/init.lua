@@ -1,10 +1,20 @@
 --- @module ion7.grammar
 --- SPDX-License-Identifier: MIT
---- GBNF grammar engine for LuaJIT — pure Lua, zero C.
+--- GBNF grammar engine for LuaJIT.
 ---
 --- Every public constructor returns a `Grammar_obj`. All `Grammar_obj`s are
 --- composable via the composition operators. Sub-modules are accessible via
 --- `Grammar.Compose`, `Grammar.Fuzzer`, etc. for advanced use.
+---
+--- Grammar source formats:
+---   - Lua type annotations  (`from_type`)
+---   - JSON Schema           (`from_json_schema`, `from_json_schema_native`)
+---   - Regex (ERE/PCRE)      (`from_regex`)
+---   - ABNF (RFC 5234)       (`from_abnf`)
+---   - EBNF (W3C-style)      (`from_ebnf`)
+---   - Enum / dynamic values (`from_enum`, `from_json_enum`, `from_tools`)
+---   - Heuristic detect      (`from_auto`)
+---   - Hand-written GBNF     (`raw`)
 ---
 --- @usage
 ---   local Grammar = require "ion7.grammar"
@@ -19,16 +29,26 @@
 ---       required = { "status" },
 ---   })
 ---
+---   -- From an ABNF rulelist
+---   local g3 = Grammar.from_abnf([[
+---       date = year "-" month "-" day
+---       year = 4DIGIT
+---       month = 2DIGIT
+---       day = 2DIGIT
+---   ]])
+---
 ---   -- Compose grammars
----   local union = g:union(g2)
+---   local union   = g:union(g2)
 ---   local wrapped = g:then_(Grammar.from_regex("\\d+"))
 ---
 --- @author Ion7-Labs
---- @version 0.1.0
+--- @version 0.2.0
 
 local ast_m    = require "ion7.grammar.ast"
 local Builder  = require "ion7.grammar.ast.builder"
 local regex_m  = require "ion7.grammar.from.regex"
+local abnf_m   = require "ion7.grammar.from.abnf"
+local ebnf_m   = require "ion7.grammar.from.ebnf"
 local json_m   = require "ion7.grammar.from.json"
 local Dynamic  = require "ion7.grammar.from.dynamic"
 local Types    = require "ion7.grammar.from.types"
@@ -50,7 +70,7 @@ local function DCCD_m()     return require "ion7.grammar.runtime.dccd"      end
 
 --- @class Grammar
 local Grammar = {
-    _VERSION  = "0.1.0",
+    _VERSION  = "0.2.0",
     -- Sub-modules (direct access when needed)
     Compose   = Compose,
     Types     = Types,
@@ -130,6 +150,69 @@ function Grammar.from_regex(pattern, root)
     return Grammar_obj.new(b)
 end
 
+--- Build from ABNF rulelist (RFC 5234 §4 syntax).
+--- See `ion7.grammar.from.abnf` for the supported subset and the
+--- documented differences from strict RFC 5234 (case sensitivity,
+--- incremental alternatives, prose values).
+--- @param  source  string   ABNF source.
+--- @param  root    string?  Root rule name (default: first defined rule).
+--- @return Grammar_obj
+function Grammar.from_abnf(source, root)
+    return Grammar_obj.new(abnf_m.from_abnf(source, root))
+end
+
+--- Build from EBNF rulelist (W3C-style — XML, JSON, SVG specs).
+--- See `ion7.grammar.from.ebnf` for the supported subset.
+--- @param  source  string   EBNF source.
+--- @param  root    string?  Root rule name (default: first defined rule).
+--- @return Grammar_obj
+function Grammar.from_ebnf(source, root)
+    return Grammar_obj.new(ebnf_m.from_ebnf(source, root))
+end
+
+--- Detect the source format and dispatch to the right `from_*` constructor.
+---
+--- Heuristics:
+---   - Trimmed source starts with `{` → JSON Schema.
+---   - Contains `::=` → W3C-style EBNF.
+---   - Has a `name = body` line (no `::=` anywhere) → RFC 5234 ABNF.
+---   - Otherwise → regex.
+---
+--- The heuristic is best-effort; if you know the format ahead of time,
+--- prefer the explicit constructor.
+---
+--- @param  source  string   Grammar source in one of the supported formats.
+--- @param  root    string?  Root rule name override.
+--- @return Grammar_obj
+function Grammar.from_auto(source, root)
+    assert(type(source) == "string",
+        "[ion7.grammar] from_auto: source must be a string")
+    local trimmed = source:match("^%s*(.-)%s*$") or ""
+
+    if trimmed:sub(1, 1) == "{" then
+        local cjson = require "ion7.vendor.json"
+        local ok, decoded = pcall(cjson.decode, trimmed)
+        if ok and type(decoded) == "table" then
+            return Grammar.from_json_schema(decoded, root)
+        end
+    end
+
+    if trimmed:find("::=", 1, true) then
+        return Grammar.from_ebnf(source, root)
+    end
+
+    -- ABNF detection: at least one line of the form `name = body`.
+    -- We scan for `\n<name>\s*=` plus a lone-line variant for the first rule.
+    local has_abnf_rule =
+        trimmed:find("^[%a][%w%-]*%s*=[^=]") ~= nil
+        or trimmed:find("\n[%a][%w%-]*%s*=[^=]") ~= nil
+    if has_abnf_rule then
+        return Grammar.from_abnf(source, root)
+    end
+
+    return Grammar.from_regex(source, root)
+end
+
 --- Build from value whitelist (longest-first, deduped).
 --- @param  rule_name  string
 --- @param  values     table
@@ -153,13 +236,14 @@ function Grammar.from_tools(tools)
     return Grammar_obj.new(Dynamic.from_tools(tools))
 end
 
---- Build from JSON Schema via the C++ libcommon backend (ion7-core required).
+--- Build from JSON Schema via the C++ libcommon backend.
 ---
---- Prefer for schemas using $ref, allOf, anyOf, oneOf, or strict format
---- validators. Falls back to from_json_schema() if ion7-core is unavailable.
+--- Routes the schema through libllama's `json_schema_to_grammar` for
+--- canonical handling of `$ref`, `allOf`, `anyOf`, `oneOf`, and the
+--- format validators. Returns a raw GBNF grammar.
 ---
---- @param  schema  string|table
---- @param  root    string?
+--- @param  schema  string|table  JSON Schema as string or Lua table.
+--- @param  root    string?       Root rule name (default: "root").
 --- @return Grammar_obj
 function Grammar.from_json_schema_native(schema, root)
     local schema_str
@@ -172,21 +256,15 @@ function Grammar.from_json_schema_native(schema, root)
         error("[ion7.grammar] from_json_schema_native: schema must be a string or table")
     end
 
-    local ok_loader, loader = pcall(require, "ion7.core.ffi.loader")
-    if not ok_loader then
-        local ok_j, json_dec = pcall(require, "ion7.vendor.json")
-        local tbl = ok_j and json_dec.decode(schema_str) or schema
-        return Grammar.from_json_schema(type(tbl) == "table" and tbl or schema, root)
-    end
+    local ffi    = require "ffi"
+    local bridge = require "ion7.core.ffi.bridge"
 
-    local ffi = require "ffi"
-    local B   = loader.instance().bridge
-    local needed = B.ion7_json_schema_to_grammar(schema_str, #schema_str, nil, 0)
+    local needed = bridge.ion7_json_schema_to_grammar(schema_str, #schema_str, nil, 0)
     if tonumber(needed) < 0 then
         error("[ion7.grammar] from_json_schema_native: invalid JSON schema")
     end
     local buf = ffi.new("char[?]", needed + 1)
-    B.ion7_json_schema_to_grammar(schema_str, #schema_str, buf, needed + 1)
+    bridge.ion7_json_schema_to_grammar(schema_str, #schema_str, buf, needed + 1)
     return Grammar.raw(ffi.string(buf))
 end
 

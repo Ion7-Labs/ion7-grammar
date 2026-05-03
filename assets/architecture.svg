@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 480" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14">
+  <style>
+    .box      { fill: none; stroke: #6b7280; stroke-width: 1.5; rx: 8; ry: 8; }
+    .box-app  { fill: #eef2ff; stroke: #4f46e5; }
+    .box-gram { fill: #f5f3ff; stroke: #7c3aed; }
+    .box-core { fill: #f0fdf4; stroke: #16a34a; }
+    .box-base { fill: #fee2e2; stroke: #dc2626; }
+    .label    { fill: #1f2937; font-weight: 600; }
+    .sub      { fill: #4b5563; font-size: 12px; }
+    .arrow    { stroke: #6b7280; stroke-width: 1.5; fill: none; marker-end: url(#tip); }
+    .arrow-opt { stroke: #9ca3af; stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; marker-end: url(#tip); }
+    @media (prefers-color-scheme: dark) {
+      .box      { stroke: #9ca3af; }
+      .box-app  { fill: #1e1b4b; stroke: #818cf8; }
+      .box-gram { fill: #2e1065; stroke: #a78bfa; }
+      .box-core { fill: #14532d; stroke: #4ade80; }
+      .box-base { fill: #450a0a; stroke: #f87171; }
+      .label    { fill: #e5e7eb; }
+      .sub      { fill: #9ca3af; }
+      .arrow, .arrow-opt { stroke: #9ca3af; }
+    }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Tier 1 : user application -->
+  <rect class="box box-app" x="160" y="20" width="400" height="60"/>
+  <text class="label" x="360" y="50" text-anchor="middle">Your Lua application</text>
+  <text class="sub"   x="360" y="68" text-anchor="middle">agent · prompt builder · schema-validated REPL · ion7-llm consumer</text>
+
+  <!-- Tier 2 : ion7.grammar -->
+  <rect class="box box-gram" x="40" y="120" width="640" height="140"/>
+  <text class="label" x="360" y="148" text-anchor="middle">ion7.grammar   ·   pure-Lua grammar engine (LPeg-backed)</text>
+  <text class="sub"   x="360" y="172" text-anchor="middle">from.regex · from.abnf · from.ebnf · from.json · from.types · from.dynamic · from_auto</text>
+  <text class="sub"   x="360" y="192" text-anchor="middle">ast (nodes, builder, compiler, walk)  ·  compose  ·  except</text>
+  <text class="sub"   x="360" y="212" text-anchor="middle">runtime (Backtrack, DCCD, GrammarContext) — per-seq isolated</text>
+  <text class="sub"   x="360" y="232" text-anchor="middle">dev (debug, fuzz)  ·  Grammar_obj (composable handle)</text>
+
+  <!-- Tier 3 : ion7.core (optional) -->
+  <rect class="box box-core" x="80" y="300" width="560" height="80"/>
+  <text class="label" x="360" y="328" text-anchor="middle">ion7.core   ·   silicon-level runtime (optional)</text>
+  <text class="sub"   x="360" y="350" text-anchor="middle">Sampler.grammar(gbnf, root, vocab)  ·  ion7.vendor.json  ·  ion7_bridge.so</text>
+  <text class="sub"   x="360" y="368" text-anchor="middle">Required only for from_json_schema_native, Backtrack, DCCD</text>
+
+  <!-- Tier 4 : llama.cpp -->
+  <rect class="box box-base" x="80" y="400" width="560" height="60"/>
+  <text class="label" x="360" y="428" text-anchor="middle">llama.cpp shared libraries</text>
+  <text class="sub"   x="360" y="448" text-anchor="middle">libllama · libggml · libllama-common</text>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M 360 80 L 360 118"/>
+  <path class="arrow-opt" d="M 360 260 L 360 298"/>
+  <path class="arrow-opt" d="M 360 380 L 360 398"/>
+</svg>
