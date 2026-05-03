@@ -1,5 +1,5 @@
 package = "ion7-grammar"
-version = "0.2.0beta1-1"
+version = "0.2.0beta1-2"
 source  = { url = "git+https://github.com/Ion7-Labs/ion7-grammar.git", tag = "v0.2.0-beta1" }
 description = {
     summary  = "Grammar engine for LuaJIT — GBNF, ABNF, EBNF, JSON Schema, regex",
