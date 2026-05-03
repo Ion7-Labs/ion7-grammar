@@ -24,7 +24,7 @@ dependencies = {
     -- the runtime objects (Backtrack, DCCD), and the `ion7.vendor.json`
     -- wrapper consumed by `from_auto` / `tool_pipeline`. lua-cjson is
     -- pulled transitively.
-    "ion7-core >= 0.1.0beta2",
+    "ion7-core >= 0.1.0beta4",
 }
 build = {
     type = "builtin",
