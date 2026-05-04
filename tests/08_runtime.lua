@@ -234,6 +234,13 @@ local mock_ctx = {
     n_past       = function(self) return self._n_past end,
     set_n_past   = function(self, n) self._n_past = n end,
     decode_single = function(self, _, _) self._n_past = self._n_past + 1 end,
+    prepare_step = function(self, _seq) end,
+    step = function(self, sampler, vocab, idx)
+        local tok = sampler:sample(self, idx or -1)
+        if vocab:is_eog(tok) then return nil end
+        self:decode_single(tok, 0)
+        return tok
+    end,
     seq_snapshot = function(self, _seq)
         snap_id = snap_id + 1
         return { id = snap_id, n_past = self._n_past }
@@ -386,6 +393,13 @@ T.test("generate: draft tokens injected into KV (arXiv:2603.03305 §3)", functio
         decode_single = function(self, tok, _)
             self._n_past = self._n_past + 1
             kv_injected[#kv_injected + 1] = tok
+        end,
+        prepare_step = function(self, _seq) end,
+        step = function(self, sampler, vocab, idx)
+            local tok = sampler:sample(self, idx or -1)
+            if vocab:is_eog(tok) then return nil end
+            self:decode_single(tok, 0)
+            return tok
         end,
         seq_snapshot = function(self, _seq) return { n_past = self._n_past } end,
         seq_restore  = function(self, snap, _seq)
@@ -556,6 +570,13 @@ T.test("generate: spec_draft_fn tokens injected before constrained pass", functi
         decode_single = function(self, tok, _)
             self._n_past = self._n_past + 1
             kv_spec[#kv_spec + 1] = tok
+        end,
+        prepare_step = function(self, _seq) end,
+        step = function(self, sampler, vocab, idx)
+            local tok = sampler:sample(self, idx or -1)
+            if vocab:is_eog(tok) then return nil end
+            self:decode_single(tok, 0)
+            return tok
         end,
         seq_snapshot = function(self, _seq)
             return { n_past = self._n_past }

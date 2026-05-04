@@ -109,22 +109,24 @@ function DCCD:_run_pass(sampler, max_tokens, on_token)
     local ctx    = self._ctx
     local vocab  = self._vocab
     local seq_id = self._seq_id
-    local ctx_ptr          = ctx.ptr
-    local ctx_decode_single = ctx.decode_single
-    local vocab_is_eog     = vocab.is_eog
-    local vocab_piece      = vocab.piece
-    local sampler_sample   = sampler.sample
+    -- Hoist methods locally so the JIT specialises one trace ; ctx:step
+    -- replaces sample → eog → decode_single (3 FFI calls / token) with a
+    -- single composite ion7_context_step bridge call.
+    local ctx_step    = ctx.step
+    local vocab_piece = vocab.piece
     local pieces = {}
     local tokens = {}
     local n      = 0
 
     sampler:reset()
+    -- Configure the per-token decode batch ONCE for the whole pass.
+    ctx:prepare_step(seq_id)
     for _ = 1, max_tokens do
-        local tok = sampler_sample(sampler, ctx_ptr(ctx), -1)
-        -- llama_sampler_sample() calls llama_sampler_accept() internally.
-        -- Do NOT call sampler:accept(tok) — double-accept corrupts grammar state.
-        if vocab_is_eog(vocab, tok) then break end
-        ctx_decode_single(ctx, tok, seq_id)
+        -- llama_sampler_sample() calls llama_sampler_accept() internally
+        -- (in ion7_context_step → llama_sampler_sample). Do NOT call
+        -- sampler:accept(tok) — double-accept corrupts grammar state.
+        local tok = ctx_step(ctx, sampler, vocab, -1)
+        if tok == nil then break end   -- nil = EOG
         self._last_tok = tok
         local piece = vocab_piece(vocab, tok)
         n = n + 1

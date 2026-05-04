@@ -77,19 +77,20 @@ end
 function Backtrack:_gen_one(batch_idx)
     local ctx     = self._ctx
     local vocab   = self._vocab
-    local sampler = self._sampler
 
-    local tok = sampler:sample(ctx:ptr(), batch_idx or -1)
-    -- llama_sampler_sample() calls llama_sampler_accept() internally.
-    -- Do NOT call sampler:accept(tok) — double-accept corrupts grammar state.
-    if vocab:is_eog(tok) then
+    -- Sync ctx._n_past to our tracked position (snapshots can rewind it),
+    -- then run the composite sample → eog-check → decode in a single FFI
+    -- call via ion7_context_step. llama_sampler_sample() calls accept()
+    -- internally — do NOT call sampler:accept here, double-accept would
+    -- corrupt grammar state.
+    ctx:set_n_past(self._pos)
+    ctx:prepare_step(self._seq_id)
+    local tok = ctx:step(self._sampler, vocab, batch_idx or -1)
+    if tok == nil then
         self._done = true
         self._stop_reason = "stop"
         return nil
     end
-
-    ctx:set_n_past(self._pos)
-    ctx:decode_single(tok, self._seq_id)
     self._pos = self._pos + 1
 
     local piece = vocab:piece(tok)
