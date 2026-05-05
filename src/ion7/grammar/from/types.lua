@@ -73,6 +73,13 @@ function Types.to_schema(typ)
     end
 
     if type(typ) == "table" then
+        -- Enum : { enum = { "a", "b", "c" } } — directly maps to a
+        -- JSON-Schema enum constraint. Documented in the module
+        -- header but historically not implemented in `to_schema`.
+        if typ.enum and type(typ.enum) == "table" and #typ.enum > 0 then
+            return { enum = typ.enum }
+        end
+
         -- Array: { "string" } or { "integer" } etc.
         if #typ == 1 and type(typ[1]) == "string" or
            #typ == 1 and type(typ[1]) == "table" then

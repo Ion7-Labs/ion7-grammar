@@ -181,7 +181,7 @@ function Converter:ensure_base(name)
             ast.literal('"'),
             ast.star(ast.alt(
                 ast.char('^"\\\\'),
-                ast.seq(ast.literal("\\\\"), ast.char('.'))
+                ast.seq(ast.literal("\\"), ast.char('.'))
             )),
             ast.literal('"')
         )
@@ -249,7 +249,7 @@ function Converter:convert_string(schema, hint)
         local name = self:fresh(hint or "str")
         local char_node = ast.alt(
             ast.char('^"\\\\'),
-            ast.seq(ast.literal("\\\\"), ast.char('.'))
+            ast.seq(ast.literal("\\"), ast.char('.'))
         )
         local body = ast.seq(
             ast.literal('"'),
